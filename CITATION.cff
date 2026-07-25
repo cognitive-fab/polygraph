@@ -9,7 +9,7 @@ abstract: >-
 authors:
   - family-names: Dubray
     given-names: Jean-Jacques
-repository-code: "https://github.com/jdubray/polygraph"
+repository-code: "https://github.com/cognitive-fab/polygraph"
 license: Apache-2.0
 type: software
 preferred-citation:

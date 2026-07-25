@@ -271,11 +271,11 @@ credentials are not used for them.
 As a Claude Code plugin (this repo is its own marketplace):
 
 ```
-/plugin marketplace add jdubray/polygraph
+/plugin marketplace add cognitive-fab/polygraph
 /plugin install polygraph@polygraph
 ```
 
-Or clone directly: `git clone https://github.com/jdubray/polygraph ~/.claude/plugins/polygraph`.
+Or clone directly: `git clone https://github.com/cognitive-fab/polygraph ~/.claude/plugins/polygraph`.
 Update later with `/plugin marketplace update polygraph`. Requires **Node ≥ 20**.
 
 No `npm install` is needed for the core loop: the SAM runtime is vendored
@@ -292,7 +292,7 @@ so a plugin installed on one surface is available on the other.
 
 Type `/plugins` in the prompt box to open the **Manage plugins** dialog, then:
 
-1. **Marketplaces** tab → add `jdubray/polygraph`
+1. **Marketplaces** tab → add `cognitive-fab/polygraph`
 2. **Plugins** tab → find `polygraph` → **Install**, and pick a scope: *for
    you* (all projects), *for this project* (shared with collaborators), or
    *locally* (just you, just this repo)

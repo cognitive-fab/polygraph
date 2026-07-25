@@ -72,7 +72,7 @@ you install it only if you want the visuals; polygraph does not pull it in.
 **As a Claude Code plugin.** Add the marketplace once, then install polyviz:
 
 ```
-/plugin marketplace add jdubray/polygraph
+/plugin marketplace add cognitive-fab/polygraph
 /plugin install polyviz@polygraph
 ```
 
@@ -82,7 +82,7 @@ agent. (Install `polygraph@polygraph` the same way for the verification engines.
 **Standalone (CLI only).** Clone the repo and run the bin directly:
 
 ```
-git clone https://github.com/jdubray/polygraph && cd polygraph
+git clone https://github.com/cognitive-fab/polygraph && cd polygraph
 npm install                    # optional deps (elkjs, @resvg/resvg-js) install here;
                                # if the native rasterizer can't build, SVG still works
 node polyviz/bin/polyviz.mjs render --in polyviz/fixtures/daao.polyviz.json \

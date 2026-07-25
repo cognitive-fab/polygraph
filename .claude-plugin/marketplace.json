@@ -1,8 +1,8 @@
 {
   "name": "polygraph",
   "owner": {
-    "name": "jdubray",
-    "url": "https://github.com/jdubray"
+    "name": "cognitive-fab",
+    "url": "https://github.com/cognitive-fab"
   },
   "plugins": [
     {
