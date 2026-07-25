@@ -3,6 +3,33 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 6.3.0 — 2026-07-25
+
+**Per-step model recommendations as config (`RECOMMENDED_MODELS`).**
+
+The 2026-07-24 Opus 5 vs Fable 5 study
+(`docs/opus5_consolidated_report.md`) split cleanly by step: `opus-5` wins on
+reading code at half the price; `fable-5` earns its 2× only for one-shot
+formal authoring with no retry, and the gap closes wherever a repair loop
+feeds checker errors back. That split is now encoded, not folklore:
+
+- `scripts/models.mjs` exports `RECOMMENDED_MODELS` — per-step entries
+  (`verify`, `polygen`, `polygen-oneshot`, `polynv-harvest`) each carrying
+  `model`, `onRefusal` (the fallback observed to answer prompts the
+  recommended model refused: `opus-4.8`), and a one-line `why` citing the
+  measurement — plus a `recommendedFor(step)` helper that returns `null` for
+  the no-model engines (polyvers, polyviz, polyrun).
+- These are recommendations, NOT defaults — the no-default-model doctrine
+  stands; every caller still passes `--model` explicitly.
+- `generate.mjs` and `polygen.mjs` usage text cite the recommendation for
+  their step; `polygen` additionally prints a one-line note when run with
+  `--repair-max 0` and a model other than `fable-5`, since one-shot mode
+  flips the recommendation.
+- README Models section gains the per-step table with the study's caveats
+  (fable-5's one-shot result is a single sample).
+- `test/selftest.mjs` pins that every recommended model and `onRefusal`
+  fallback resolves through `MODEL_ALIASES`, and the per-step lookups.
+
 ## 6.2.1 — 2026-07-24
 
 **`opus-5` alias, refusals as a first-class failure, recommendation moved up.**

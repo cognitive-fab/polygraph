@@ -619,6 +619,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const usage = (msg) => {
     if (msg) console.error(`[polygen] ${msg}`);
     console.error('usage: node polygen.mjs --intent "<text>" --model <id> [--contract <c.json>] [--lang javascript] [--out out/] [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]');
+    console.error('       no default model; recommended: opus-5 with the repair loop on, fable-5 for --repair-max 0 (see RECOMMENDED_MODELS in models.mjs)');
     process.exit(2);
   };
   // Only --legacy-bare-next is boolean; every other flag takes a value. A
@@ -645,6 +646,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   };
   const { id, resolved } = resolveModel(a.model);
   console.error(`[polygen] model=${a.model}${resolved ? ` -> ${id}` : ' (verbatim)'}${a['legacy-bare-next'] ? ' artifact=legacy bare-next' : ' artifact=sam-v2'}`);
+  // One-shot mode changes the model economics: with no repair loop to feed
+  // checker errors back, the study's recommendation flips to fable-5.
+  if (intOpt(a['repair-max'], 'repair-max', 3, 0) === 0 && a.model !== 'fable-5' && a.model !== 'claude-fable-5') {
+    console.error(`[polygen] note: --repair-max 0 is one-shot authoring — the measured recommendation for this mode is fable-5, not ${a.model} (see RECOMMENDED_MODELS in models.mjs)`);
+  }
   polygen({
     intent: a.intent,
     contractPath: a.contract,

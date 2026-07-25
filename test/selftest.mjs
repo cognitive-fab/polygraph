@@ -92,6 +92,15 @@ ok('model alias resolved (fable-5 -> claude-fable-5)', reqBody.model === 'claude
 ok('unknown model passed verbatim', resolveModel('some-exact-api-id').id === 'some-exact-api-id');
 ok('documented recommended alias resolves (sonnet-5)', resolveModel('sonnet-5').resolved === true);
 ok('opus-5 alias resolves (bare "opus-5" is a 404 at the API)', resolveModel('opus-5').id === 'claude-opus-5');
+{
+  const { RECOMMENDED_MODELS, recommendedFor } = await import('../scripts/models.mjs');
+  ok('every recommended model (and onRefusal fallback) is a known alias',
+    Object.values(RECOMMENDED_MODELS).every((r) =>
+      resolveModel(r.model).resolved && (!r.onRefusal || resolveModel(r.onRefusal).resolved)));
+  ok('recommendedFor(verify) is opus-5', recommendedFor('verify')?.model === 'opus-5');
+  ok('recommendedFor(polygen-oneshot) is fable-5', recommendedFor('polygen-oneshot')?.model === 'fable-5');
+  ok('recommendedFor(unknown step) is null (no-model engines have no entry)', recommendedFor('polyviz') === null);
+}
 ok('prompt-cache control on the source turn', reqBody.messages[0].content[0].cache_control.type === 'ephemeral');
 ok('extractSpec pulls the fenced block', extractSpec('```javascript\nmodule.exports={};\n```') === 'module.exports={};');
 

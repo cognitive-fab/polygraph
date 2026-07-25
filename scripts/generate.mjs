@@ -134,6 +134,7 @@ export async function generateSpecs({ prompt, model, n = 5, apiKey, fetchImpl = 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const usage = () => {
     console.error('usage: node generate.mjs --prompt <file> --model <id> [--n 5] [--max-tokens 32000] [--out <dir>]');
+    console.error('       no default model; recommended for spec derivation: opus-5 (see RECOMMENDED_MODELS in models.mjs)');
     process.exit(2);
   };
   // Every generate flag takes a value; a flag-shaped "value" means the real

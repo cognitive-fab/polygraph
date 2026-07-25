@@ -384,11 +384,26 @@ There is **no default model** — pass `--model`. Recommended: **`opus-5` or
 better** — deriving a faithful transition-function spec is a hard reasoning task,
 and lighter models (e.g. `sonnet-5`) are not powerful enough for it.
 
+The recommendation is per-step (`RECOMMENDED_MODELS` in `scripts/models.mjs`;
+full analysis in [`docs/opus5_consolidated_report.md`](docs/opus5_consolidated_report.md)).
+The split from the 2026-07-24 study: on *reading* code, `opus-5` beat `fable-5`
+outright at half the price; on *one-shot* formal authoring with no retry,
+`fable-5` was ahead — and the gap closes as soon as a repair loop feeds
+checker errors back.
+
+| step | recommended | why |
+|---|---|---|
+| `verify` (spec derivation) | `opus-5` | 5/5 seeded bugs, 0 false alarms on the 8-machine A/B; `fable-5` also 5/5 but 1 false alarm, at 2× the price |
+| `polygen` (repair loop on, the default) | `opus-5` | its authoring misses were one-line syntax habits the repair loop fixes in one round |
+| `polygen --repair-max 0` (one-shot) | `fable-5` | passed the model checker cold where `opus-5` went 1/5 first-try (suggestive — single `fable-5` sample) |
+| polynv headless harvest | `opus-5` | candidates are mechanically pre-checked downstream, so the retry-regime logic applies |
+| polyvers / polyviz / polyrun | — | no model calls |
+
 | alias | resolves to | notes |
 |---|---|---|
-| `opus-5` | `claude-opus-5` | **recommended** — most capable; use this or a newer Opus |
-| `opus-4.8` | `claude-opus-4-8` | previous recommendation; still strong |
-| `fable-5` | `claude-fable-5` | strongest in the origin study |
+| `opus-5` | `claude-opus-5` | **recommended** for every step with a retry/repair loop; use this or a newer Opus |
+| `fable-5` | `claude-fable-5` | recommended only for one-shot formal authoring (no retry); strongest in the origin study |
+| `opus-4.8` | `claude-opus-4-8` | previous recommendation; still strong — and the refusal fallback (see below) |
 | `sonnet-5` | `claude-sonnet-5` | available, but underpowered for spec derivation — not recommended |
 
 `opus-5` measured on the 8-machine A/B (`eval/ab-v2.mjs`, 2026-07-24, n=3):
