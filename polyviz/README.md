@@ -9,7 +9,7 @@ render time.
 Full spec: [`docs/polyviz-spec.md`](../docs/polyviz-spec.md). Worked example (real
 artifacts → the full catalog): [`examples/polyviz-oms/`](../examples/polyviz-oms/).
 The reference figures in [`reference/`](reference/) come from the
-[DAAO demo](https://github.com/jdubray/polygraph-demo-daao).
+[DAAO demo](https://github.com/cognitive-fab/polygraph-demo-daao).
 
 ## Status
 

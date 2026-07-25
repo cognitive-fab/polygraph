@@ -39,7 +39,7 @@ questions, commercial support, or collaboration, reach us at
 
 The **DAAO demo** — a Dual-Authorization Action Order machine taken end to end
 through the method (author it, break it, catch it, version-gate it) — lives in
-its own repo: [`jdubray/polygraph-demo-daao`](https://github.com/jdubray/polygraph-demo-daao).
+its own repo: [`cognitive-fab/polygraph-demo-daao`](https://github.com/cognitive-fab/polygraph-demo-daao).
 
 Three articles walk the demos:
 
