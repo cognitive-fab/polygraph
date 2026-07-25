@@ -1,7 +1,7 @@
 # Turnstile — v2 (SAM strict profile) example
 
 The `examples/turnstile` machine with its reference spec ported to the v2
-artifact contract: a [sam-lib 2.0.0-alpha](https://github.com/jdubray/sam-lib)
+artifact contract: a [sam-lib 2.0.0-alpha](https://github.com/cognitive-fab/sam-lib)
 strict-profile module exporting `{ instance, init, actions, getState, setState }`,
 with a declared `modelShape`, per-intent schemas and domains, and the contract's
 `push-while-locked-is-noop` special rule expressed as `reject('push-while-locked-is-noop')`
