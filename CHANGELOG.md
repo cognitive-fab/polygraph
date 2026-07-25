@@ -29,6 +29,12 @@ feeds checker errors back. That split is now encoded, not folklore:
   (fable-5's one-shot result is a single sample).
 - `test/selftest.mjs` pins that every recommended model and `onRefusal`
   fallback resolves through `MODEL_ALIASES`, and the per-step lookups.
+- The six plugin instruction files (both skills, both agents, both commands)
+  now state the per-step rule — `opus-5` with a repair loop, `fable-5` for
+  `--repair-max 0`, `opus-4.8` on an API policy refusal — and name
+  `RECOMMENDED_MODELS` as the source of truth, so in-session agents recommend
+  from the config rather than the flat 6.2.1 text. (polynv's skill is
+  unchanged: its in-session path makes no API model choice.)
 
 ## 6.2.1 — 2026-07-24
 

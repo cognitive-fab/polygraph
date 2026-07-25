@@ -37,8 +37,11 @@ artifact instead. (House rule from sam-lib #29, fixed in 2.0.0-alpha.2: never re
 > reading of your intent; they need your review before either is trusted.
 
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. `polygen.mjs` needs
-`ANTHROPIC_API_KEY` and an explicit `--model` (no default; recommend
-`opus-5` or better).
+`ANTHROPIC_API_KEY` and an explicit `--model` (no default; recommend `opus-5`
+with the self-repair loop on, which is the default — `fable-5` only for
+one-shot runs with `--repair-max 0`, and `opus-4.8` as the retry if the API
+refuses on policy grounds. Per-step source of truth: `RECOMMENDED_MODELS` in
+`scripts/models.mjs`).
 
 ## Step 1 — Get the feature intent and the contract (do this WITH the user)
 

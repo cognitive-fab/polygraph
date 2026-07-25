@@ -16,7 +16,9 @@ bare `next(state, action, data)` contract end-to-end instead.
 Inputs you expect (ask only if missing): a `contract.json` (or enough
 information to build one from `${CLAUDE_PLUGIN_ROOT}/templates/`), the source
 file under test, and a trace corpus directory. For generation you need
-`ANTHROPIC_API_KEY` and a model (recommend `opus-5` or `fable-5`).
+`ANTHROPIC_API_KEY` and a model (recommend `opus-5`; if the API refuses the
+prompt on policy grounds, retry with `opus-4.8` — per-step source of truth:
+`RECOMMENDED_MODELS` in `scripts/models.mjs`).
 
 Procedure:
 

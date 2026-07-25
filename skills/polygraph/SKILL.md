@@ -35,7 +35,9 @@ replaying, and classifying.
 
 All scripts live under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Node ≥ 20 is required.
 Generation needs `ANTHROPIC_API_KEY` and an explicit model (recommend
-`opus-5` or `fable-5`; there is no default). Replay and controls need no key.
+`opus-5`; on an API policy refusal retry with `opus-4.8` — per-step source of
+truth: `RECOMMENDED_MODELS` in `scripts/models.mjs`; there is no default).
+Replay and controls need no key.
 
 **The artifact (v0.7):** by default the derived spec is a **SAM v2
 strict-profile module** (`@cognitive-fab/sam-pattern` 2.2.0, vendored at

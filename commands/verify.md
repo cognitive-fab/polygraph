@@ -50,8 +50,10 @@ Useful flags:
   Part 2 structurally blind to behavior it gates — seed non-default values to
   unfreeze it).
 
-Recommended models: `opus-5`, `fable-5` (configurable; no default — pass the
-exact Anthropic model id if you are not using a known alias).
+Recommended model: `opus-5` for spec derivation; if the API refuses on policy
+grounds, retry with `opus-4.8` (per-step source of truth: `RECOMMENDED_MODELS`
+in `scripts/models.mjs`). No default — pass the exact Anthropic model id if
+you are not using a known alias.
 
 Prerequisite: a REAL captured trace corpus. The corpus is the verification —
 if the code cannot be run and instrumented to capture traces, this tool does

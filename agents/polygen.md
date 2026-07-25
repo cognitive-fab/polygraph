@@ -14,7 +14,10 @@ only**.
 
 Inputs you expect (ask only if missing): a plain-language feature
 description (`--intent`), and a model id (`--model`; no default — recommend
-`opus-5` or better). A `--contract` may be supplied if the caller
+`opus-5` with the self-repair loop on, which is the default; `fable-5` only
+for one-shot runs with `--repair-max 0`; on an API policy refusal retry with
+`opus-4.8`. Per-step source of truth: `RECOMMENDED_MODELS` in
+`scripts/models.mjs`). A `--contract` may be supplied if the caller
 already has one; otherwise polygen drafts it from the intent.
 
 Procedure:
