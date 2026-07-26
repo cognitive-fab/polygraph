@@ -290,13 +290,25 @@ terminal — the extension bundles the same CLI, runs locally with the same
 filesystem and shell access, and shares `~/.claude/settings.json` with the CLI,
 so a plugin installed on one surface is available on the other.
 
-Type `/plugins` in the prompt box to open the **Manage plugins** dialog, then:
+Type `/plugin` in the prompt box and select **Manage plugins**, then:
 
-1. **Marketplaces** tab → add `cognitive-fab/polygraph`
-2. **Plugins** tab → find `polygraph` → **Install**, and pick a scope: *for
-   you* (all projects), *for this project* (shared with collaborators), or
-   *locally* (just you, just this repo)
+1. **Marketplaces** tab → paste `https://github.com/cognitive-fab/polygraph`
+   and hit **Add**. (The field says "GitHub repo, URL, or path…", but the
+   `owner/repo` shorthand that works in the terminal may not be accepted
+   here — the full GitHub URL always is.)
+2. Back on the **Plugins** tab → `polygraph` appears under **Available** →
+   **Install**, and pick a scope: *for you* (all projects), *for this
+   project* (shared with collaborators), or *locally* (just you, just this
+   repo)
 3. Restart Claude Code when the banner asks
+
+<p align="center">
+  <a href="assets/vscode-open-manage-plugins.png"><img src="assets/vscode-open-manage-plugins.png" alt="Type /plugin and select Manage plugins" width="260"></a>
+  <a href="assets/vscode-marketplaces-tab.png"><img src="assets/vscode-marketplaces-tab.png" alt="Marketplaces tab — paste the GitHub URL and Add" width="260"></a>
+  <a href="assets/vscode-plugins-tab.png"><img src="assets/vscode-plugins-tab.png" alt="Plugins tab — polygraph under Available, ready to Install" width="200"></a>
+  <br>
+  <em>Open Manage plugins → add the marketplace by URL → install from the Plugins tab. Click any screenshot to enlarge.</em>
+</p>
 
 Two things behave differently from the terminal, and both look like a broken
 plugin if you hit them cold:
