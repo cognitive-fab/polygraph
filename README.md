@@ -109,9 +109,11 @@ by a model checker and trace validation* is a practical bug-finder.
 
 Where Specula is ahead of Polygraph's audit engine, plainly:
 
-- **It generates its own traces.** Its agents instrument the target code, map
-  each spec action to code locations, and a replay harness verifies
-  post-state agreement. Polygraph asks *you* to bring a trace corpus.
+- **Its capture is engine-owned and repeatable.** Its agents instrument the
+  target, and a replay harness verifies post-state agreement inside the
+  pipeline, with a conformance repair loop. Polygraph's capture is owned by
+  the agent per run (Step 2 of the skill), so the harness is not by default a
+  committed, re-runnable artifact.
 - **It reproduces bugs in the running system**, forcing the counterexample
   schedule at code level and assessing consequence. Polygraph stops at a
   spec-level counterexample path.
