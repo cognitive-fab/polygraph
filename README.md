@@ -91,16 +91,50 @@ trust it. You stay in JavaScript the whole time. (If you *do* want the real
 thing, an optional `--tla` flag mechanically transpiles the winning spec to
 TLA+ and runs TLC over it.)
 
-This bet is no longer a fringe position. Emilie Ma's Berlin Buzzwords talk
-[*Scaling formal methods with LLMs*](https://www.youtube.com/watch?v=M2wb2ug2gYg)
-presents the same thesis from the TLA+ side: SysMoBench, a benchmark showing
-frontier LLMs can't yet write conformant specs unaided, and Specula, an
-agentic pipeline (spec generation + model checking + trace validation — the
-same three legs Polygraph stands on) that found 160+ bugs in production
-systems like MongoDB and etcd-raft, over 130 previously unknown, at roughly
-$40 per repository. The convergent finding: the LLM alone is not trustworthy,
-but an LLM *held accountable by a model checker and trace validation* is a
-practical bug-finder.
+This bet is no longer a fringe position — and the strongest evidence for it
+comes from a project that is **ahead of Polygraph on the one axis the two
+share**:
+
+> **Specula: Scaling formal specifications for autonomous model checking of
+> system code.** arXiv:2607.25333, July 2026.
+> <https://github.com/specula-org/Specula> (Apache-2.0)
+
+Specula is an agentic TLA+ pipeline standing on the same three legs Polygraph
+does — spec generation, model checking, trace validation. Its paper reports
+**249 bugs across 48 projects** (MongoDB, Etcd, ScyllaDB, GCC libgomp, LLVM
+libomp), 207 previously unknown, 68 confirmed and 24 fixed upstream, at a
+median of $57 and 3.7 hours per system. The convergent finding is the one
+that matters: the LLM alone is not trustworthy, but an LLM *held accountable
+by a model checker and trace validation* is a practical bug-finder.
+
+Where Specula is ahead of Polygraph's audit engine, plainly:
+
+- **It generates its own traces.** Its agents instrument the target code, map
+  each spec action to code locations, and a replay harness verifies
+  post-state agreement. Polygraph asks *you* to bring a trace corpus.
+- **It reproduces bugs in the running system**, forcing the counterexample
+  schedule at code level and assessing consequence. Polygraph stops at a
+  spec-level counterexample path.
+- **It triages.** 48.8% of its model-level violations were discharged as
+  *masked* — real invariant breaks with no observable consequence. Polygraph
+  hands you all of them as leads to check by hand.
+- **It has third-party confirmation.** Upstream maintainers fixed 24 of its
+  findings. Polygraph has one corroborated production bug and a seeded-bug
+  eval.
+- **It requires invariants to cite their evidence** — a commit, code
+  location, or issue. polynv harvests candidates but does not demand
+  provenance.
+
+The difference is not that Polygraph audits better. It is that auditing is
+one engine of several here, and Specula has **no authoring, no CI gate, no
+runtime, and no versioning** — its paper states specs are generated from a
+snapshot and must be regenerated when the code changes. At $57 and 3.7 hours
+per system it structurally cannot run on every merge request; Polygraph's
+model check and replay are keyless and deterministic, which is what makes
+`polygate` possible. Different bet, different slot. If your problem is deep
+bugs in a large concurrent or distributed system written in C, C++, Go, Rust,
+Java, or Erlang, **use Specula** — that is what it is for, and it is good at
+it.
 
 > **The five engines** share one artifact family, so what one produces the
 > next can consume: **Polygraph** audits (this document), **polygen**
@@ -492,16 +526,44 @@ The method is introduced in:
 
 The 2.0 release gate: a seeded-bug A/B eval passing at parity or better at two
 model tiers, with two bugs newly caught at the cheap replay tier and zero dead
-specs. Reference implementation and full case study:
-<https://github.com/jdubray/SysMoBench-1>.
+specs.
+
+### Where we actually stand on SysMoBench
+
+[SysMoBench](https://arxiv.org/abs/2509.23130) (v3, January 2026) grades a generated
+specification in four phases, the decisive one replaying execution traces
+captured from the running system. Three things worth stating plainly:
+
+- **Polygraph has no published SysMoBench bug-finding score.** Our work on the
+  benchmark — *Executable JavaScript as a Checkable Specification Language: A
+  JS-SAM Case Study on SysMoBench* ([arXiv:2607.13092](https://arxiv.org/abs/2607.13092))
+  — is a controlled language/contract comparison that adds JS-SAM as the
+  benchmark's first non-formal backend. It is not a bug-finding result and
+  should not be read as one.
+- **Specula reports 100% on all four phases** (syntax, runtime correctness,
+  conformance, invariant satisfaction), against 81–82% for unaided agent
+  baselines. That is the number to beat, and we have not beaten it. In
+  fairness to the reader on both sides of the ledger: SysMoBench and Specula
+  share eight of Specula's nine authors, so that figure is a self-evaluation
+  on the team's own benchmark — just as `SysMoBench-1` below is our own fork.
+  Neither fact is disqualifying; both should be visible.
+- **Our JS-SAM finding is why the SAM v2 strict profile looks the way it
+  does**: conformance against the real system is the only phase that
+  discriminates among models, and once the comparison is drawn like for like
+  it is the *specification contract*, not the language, that governs
+  fidelity — JavaScript in the shape of the TLA+ transition relation is as
+  faithful as TLA+. Both projects converge on the same place from opposite
+  directions; Specula got there with an agentic repair loop, we got there by
+  constraining the contract.
+
+<https://github.com/jdubray/SysMoBench-1> is **our own fork**, not an
+independent evaluation of Polygraph.
 
 Related work: Emilie Ma,
 [*Scaling formal methods with LLMs*](https://www.youtube.com/watch?v=M2wb2ug2gYg)
-(Berlin Buzzwords) — SysMoBench (benchmarking LLM spec generation on
-production systems) and Specula (an agentic TLA+ spec-generation and
-bug-discovery pipeline), reaching the same conclusion from the formal-methods
-side: model checking plus trace validation is what makes LLM-generated specs
-trustworthy.
+(Berlin Buzzwords), which presents SysMoBench and Specula together and
+reaches the same conclusion from the formal-methods side: model checking plus
+trace validation is what makes LLM-generated specs trustworthy.
 
 If you use Polygraph in your work, please cite the paper (see `CITATION.cff`).
 
