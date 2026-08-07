@@ -1,0 +1,3 @@
+{"pre":{"todoState":"open","snoozeCount":0,"dueAt":"","doneVia":""},"action":"SET_DUE","data":{"dueAt":"2026-08-07T09:00:00Z"},"post":{"todoState":"open","snoozeCount":0,"dueAt":"2026-08-07T09:00:00Z","doneVia":""}}
+{"pre":{"todoState":"open","snoozeCount":0,"dueAt":"2026-08-07T09:00:00Z","doneVia":""},"action":"DUE_PASSED","data":{"dueAt":"2026-08-07T09:00:00Z"},"post":{"todoState":"overdue","snoozeCount":0,"dueAt":"2026-08-07T09:00:00Z","doneVia":""}}
+{"pre":{"todoState":"overdue","snoozeCount":0,"dueAt":"2026-08-07T09:00:00Z","doneVia":""},"action":"DROP","data":{"reason":"no-longer-relevant"},"post":{"todoState":"archived","snoozeCount":0,"dueAt":"","doneVia":"no-longer-relevant"}}

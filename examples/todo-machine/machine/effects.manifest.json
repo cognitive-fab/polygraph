@@ -1,0 +1,12 @@
+{
+  "effects": {
+    "notifyUser": {
+      "payloadSchema": { "dueAt": "string", "snoozeCount": "number" },
+      "retry": { "maxAttempts": 3, "baseMs": 200, "timeoutMs": 5000 }
+    },
+    "suggestTriage": {
+      "payloadSchema": { "snoozeCount": "number" },
+      "retry": { "maxAttempts": 2, "baseMs": 300, "timeoutMs": 30000 }
+    }
+  }
+}

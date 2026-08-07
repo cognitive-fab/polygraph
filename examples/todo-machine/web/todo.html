@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>todo — a verified machine per item</title>
+<style>
+  :root { color-scheme: light dark;
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c2330; --muted: #67707f;
+    --line: #e3e6ea; --accent: #2563eb; --warn: #b45309; --bad: #b91c1c; --ok: #15803d; }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg: #12151a; --card: #1a1e25; --ink: #e8eaee; --muted: #98a1ad;
+    --line: #2a303a; --accent: #7aa2ff; --warn: #e0a34e; --bad: #ef7070; --ok: #63c583; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+  .sub a { color: var(--accent); }
+  form { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  input[type=text] { flex: 1 1 240px; padding: 9px 12px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; }
+  select { padding: 9px 8px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--ink); font: inherit; }
+  button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--ink); font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 10px; }
+  .row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .title { font-weight: 600; }
+  .done .title { text-decoration: line-through; color: var(--muted); }
+  .badge { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); }
+  .badge.open { color: var(--accent); border-color: var(--accent); }
+  .badge.overdue { color: var(--warn); border-color: var(--warn); }
+  .badge.needsTriage { color: var(--bad); border-color: var(--bad); }
+  .badge.completed { color: var(--ok); border-color: var(--ok); }
+  .badge.archived { color: var(--muted); }
+  .meta { color: var(--muted); font-size: 12.5px; }
+  .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .actions button { padding: 5px 11px; font-size: 13px; }
+  .suggest { margin-top: 8px; font-size: 13px; color: var(--bad); }
+  .journal { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px;
+    font: 12px/1.7 ui-monospace, monospace; white-space: pre; overflow-x: auto; }
+  .rej { color: var(--muted); }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  .toast.show { opacity: .92; }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>todo</h1>
+  <div class="sub">every item is a model-checked polyrun instance — this page only dispatches events ·
+    <a href="/" target="_blank">ops console</a></div>
+
+  <form id="create">
+    <input type="text" id="title" placeholder="what needs doing?" maxlength="120" autofocus>
+    <select id="due">
+      <option value="">no due date</option>
+      <option value="15">due in 15 s</option>
+      <option value="30">due in 30 s</option>
+      <option value="60">due in 1 min</option>
+      <option value="300">due in 5 min</option>
+    </select>
+    <button class="primary">add</button>
+  </form>
+
+  <div id="list"></div>
+  <div class="empty" id="empty" hidden>nothing yet — add a todo, give it a 15 s due date, and watch the machine work</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const openJournals = new Set();
+let toastTimer;
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body
+    ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+    : undefined);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// Every button dispatches an EVENT with a caller-stable actionId derived
+// from the intent + the state it was decided against (seq). Double-clicks
+// dedupe; a click that lost a race becomes an observable reject, not a bug.
+async function dispatch(id, action, data, seq) {
+  const out = await api(`/instances/${id}/actions`, {
+    action, data, actionId: `${action.toLowerCase()}:${seq}`,
+  });
+  if (out.deduped) toast('duplicate click — deduped, nothing re-executed');
+  else if (out.stepKind === 'rejected') toast(`machine rejected: ${out.rejectReason} (state moved on — that's the point)`);
+  return out;
+}
+
+const soon = (secs) => new Date(Date.now() + secs * 1000).toISOString();
+const fmtDue = (iso) => {
+  if (!iso) return '';
+  const d = Math.round((Date.parse(iso) - Date.now()) / 1000);
+  return d >= 0 ? `due in ${d}s` : `was due ${-d}s ago`;
+};
+
+$('create').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = $('title').value.trim();
+  if (!title) return;
+  const secs = $('due').value;
+  await api('/app/todos', { title, dueAt: secs ? soon(Number(secs)) : '' });
+  $('title').value = '';
+  refresh();
+});
+
+function buttons(t) {
+  const s = t.state.todoState, id = t.instanceId, seq = t.seq;
+  const b = [];
+  if (s === 'open') {
+    if (!t.state.dueAt) b.push(['set due +15 s', () => dispatch(id, 'SET_DUE', { dueAt: soon(15) }, seq)]);
+    b.push(['complete ✓', () => dispatch(id, 'COMPLETE', {}, seq)]);
+    b.push(['drop', () => dispatch(id, 'DROP', { reason: 'no-longer-relevant' }, seq)]);
+  } else if (s === 'overdue') {
+    b.push([`snooze +15 s (${t.state.snoozeCount}/2 used)`, () => dispatch(id, 'SNOOZE', { until: soon(15) }, seq)]);
+    b.push(['complete ✓', () => dispatch(id, 'COMPLETE', {}, seq)]);
+    b.push(['drop', () => dispatch(id, 'DROP', { reason: 'no-longer-relevant' }, seq)]);
+  } else if (s === 'needsTriage') {
+    b.push(['complete ✓', () => dispatch(id, 'COMPLETE', {}, seq)]);
+    b.push(['drop (accept suggestion)', () => dispatch(id, 'DROP', { reason: 'no-longer-relevant' }, seq)]);
+  }
+  b.push([openJournals.has(id) ? 'hide journal' : 'journal', () => {
+    openJournals.has(id) ? openJournals.delete(id) : openJournals.add(id);
+    refresh();
+  }]);
+  return b;
+}
+
+async function journalHtml(id) {
+  const rows = await api(`/instances/${id}/journal`);
+  return rows.map((r) => {
+    const kind = r.step_kind === 'accepted' ? 'accepted' : `${r.step_kind} (${r.reject_reason})`;
+    const line = `#${String(r.seq).padStart(2)} ${r.action.padEnd(11)} ${kind.padEnd(34)} → ${r.post.todoState} snoozes=${r.post.snoozeCount}`;
+    return r.step_kind === 'accepted' ? line : `<span class="rej">${line}</span>`;
+  }).join('\n');
+}
+
+async function refresh() {
+  const todos = await api('/app/todos').catch(() => null);
+  if (!todos) return;
+  $('empty').hidden = todos.length > 0;
+  const frag = document.createDocumentFragment();
+  for (const t of todos) {
+    const s = t.state.todoState;
+    const card = document.createElement('div');
+    card.className = 'card' + (t.status !== 'active' ? ' done' : '');
+    const meta = [
+      s !== 'completed' && s !== 'archived' && t.state.dueAt ? fmtDue(t.state.dueAt) : '',
+      t.reminders ? `🔔 ${t.reminders}` : '',
+      t.state.snoozeCount ? `snoozed ${t.state.snoozeCount}×` : '',
+      t.state.doneVia ? `ended: ${t.state.doneVia}` : '',
+    ].filter(Boolean).join(' · ');
+    card.innerHTML =
+      `<div class="row"><span class="title"></span>` +
+      `<span class="badge ${s}">${s}</span><span class="meta">${meta}</span></div>` +
+      (t.suggestion ? `<div class="suggest">🤖 model suggests: ${t.suggestion.suggestion.toUpperCase()} — ${t.suggestion.why}. Your call:</div>` : '');
+    card.querySelector('.title').textContent = t.title;
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    for (const [label, fn] of buttons(t)) {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.addEventListener('click', async () => { try { await fn(); } catch (err) { toast(err.message); } refresh(); });
+      actions.appendChild(btn);
+    }
+    card.appendChild(actions);
+    if (openJournals.has(t.instanceId)) {
+      const j = document.createElement('div');
+      j.className = 'journal';
+      j.innerHTML = 'loading…';
+      journalHtml(t.instanceId).then((html) => { j.innerHTML = html; });
+      card.appendChild(j);
+    }
+    frag.appendChild(card);
+  }
+  $('list').replaceChildren(frag);
+}
+
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "todoState",
+      "type": "enum: 'open' | 'overdue' | 'needsTriage' | 'completed' | 'archived'"
+    },
+    {
+      "name": "snoozeCount",
+      "type": "integer 0..2, how many times the user snoozed an overdue item"
+    },
+    {
+      "name": "dueAt",
+      "type": "string, ISO-8601 due timestamp ('' when no due date is set)"
+    },
+    {
+      "name": "doneVia",
+      "type": "string, how the item ended: 'completed' or a drop reason ('' until terminal)"
+    }
+  ],
+  "initState": {
+    "todoState": "open",
+    "snoozeCount": 0,
+    "dueAt": "",
+    "doneVia": ""
+  },
+  "actions": {
+    "SET_DUE": {
+      "dataFields": {
+        "dueAt": "string - ISO-8601 due timestamp, non-empty"
+      }
+    },
+    "DUE_PASSED": {
+      "dataFields": {
+        "dueAt": "string - the due timestamp this (timer) event was scheduled for; must match the item's current dueAt or the event is stale"
+      }
+    },
+    "SNOOZE": {
+      "dataFields": {
+        "until": "string - ISO-8601 new due timestamp, non-empty; recorded verbatim as the new dueAt"
+      }
+    },
+    "COMPLETE": {
+      "dataFields": {}
+    },
+    "DROP": {
+      "dataFields": {
+        "reason": "string - why the item was dropped, non-empty"
+      }
+    }
+  },
+  "dataDomain": {
+    "SET_DUE": {
+      "dueAt": [
+        "2026-08-07T09:00:00Z"
+      ]
+    },
+    "DUE_PASSED": {
+      "dueAt": [
+        "2026-08-07T09:00:00Z",
+        "2026-08-08T09:00:00Z"
+      ]
+    },
+    "SNOOZE": {
+      "until": [
+        "2026-08-08T09:00:00Z"
+      ]
+    },
+    "COMPLETE": {},
+    "DROP": {
+      "reason": [
+        "no-longer-relevant"
+      ]
+    }
+  },
+  "terminalKey": "todoState",
+  "terminalStates": [
+    "completed",
+    "archived"
+  ],
+  "specialRules": [
+    {
+      "name": "corrections-are-event-driven",
+      "note": "The ONLY backward edge in the lifecycle is overdue -> open, taken ONLY by SNOOZE, which records the new due date (data.until) verbatim in dueAt and increments snoozeCount by exactly 1. No action exists that re-opens or re-schedules an item without a concrete signal.",
+      "whenState": "todoState == 'overdue'",
+      "whenAction": "SNOOZE"
+    },
+    {
+      "name": "bounded-snooze-budget-triages",
+      "note": "SNOOZE with snoozeCount already at 2 moves the item to needsTriage (a human decides: COMPLETE or DROP) instead of granting another lap. needsTriage accepts only COMPLETE and DROP.",
+      "whenState": "todoState == 'overdue' && snoozeCount >= 2",
+      "whenAction": "SNOOZE"
+    },
+    {
+      "name": "stale-due-timer-reject",
+      "note": "DUE_PASSED applies only in 'open' AND only when data.dueAt equals the item's current dueAt. A timer for a superseded due date, or firing after the item completed/was dropped, is an observable rejection (post == pre), never a fault — this is what makes durable at-least-once timers safe with zero cancellation races.",
+      "whenState": "any state where todoState != 'open' or data.dueAt != dueAt",
+      "whenAction": "DUE_PASSED"
+    },
+    {
+      "name": "reopen-is-a-new-instance",
+      "note": "completed and archived are frozen terminals: there is deliberately no REOPEN action. Un-completing a todo is creating a new instance (fresh budget, fresh journal), not mutating a settled one.",
+      "whenState": "todoState == 'completed' || todoState == 'archived'",
+      "whenAction": "any"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre."
+}
