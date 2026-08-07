@@ -1,0 +1,113 @@
+{
+  "lang": "javascript",
+  "stateKeys": [
+    {
+      "name": "docState",
+      "type": "enum: 'received' | 'extracting' | 'transforming' | 'validating' | 'rendering' | 'published' | 'escalated'"
+    },
+    {
+      "name": "fixAttempts",
+      "type": "integer 0..2, how many times validation sent the document back for a targeted fix"
+    },
+    {
+      "name": "lastViolation",
+      "type": "string, the exact signal that caused the last bend-back or escalation ('' when none outstanding)"
+    }
+  ],
+  "initState": {
+    "docState": "received",
+    "fixAttempts": 0,
+    "lastViolation": ""
+  },
+  "actions": {
+    "START": {
+      "dataFields": {}
+    },
+    "EXTRACT_DONE": {
+      "dataFields": {}
+    },
+    "EXTRACT_FAILED": {
+      "dataFields": {
+        "reason": "string"
+      }
+    },
+    "TRANSFORM_DONE": {
+      "dataFields": {}
+    },
+    "TRANSFORM_FAILED": {
+      "dataFields": {
+        "reason": "string"
+      }
+    },
+    "VALIDATION_PASSED": {
+      "dataFields": {}
+    },
+    "VALIDATION_FAILED": {
+      "dataFields": {
+        "violation": "string - the exact schema/content rule that failed; routed back to the transform stage verbatim"
+      }
+    },
+    "RENDER_DONE": {
+      "dataFields": {}
+    },
+    "RENDER_FAILED": {
+      "dataFields": {
+        "reason": "string"
+      }
+    }
+  },
+  "dataDomain": {
+    "START": {},
+    "EXTRACT_DONE": {},
+    "EXTRACT_FAILED": {
+      "reason": [
+        "unreadable-input"
+      ]
+    },
+    "TRANSFORM_DONE": {},
+    "TRANSFORM_FAILED": {
+      "reason": [
+        "model-unavailable"
+      ]
+    },
+    "VALIDATION_PASSED": {},
+    "VALIDATION_FAILED": {
+      "violation": [
+        "missing-title",
+        "broken-schema"
+      ]
+    },
+    "RENDER_DONE": {},
+    "RENDER_FAILED": {
+      "reason": [
+        "render-crashed"
+      ]
+    }
+  },
+  "terminalKey": "docState",
+  "terminalStates": [
+    "published",
+    "escalated"
+  ],
+  "specialRules": [
+    {
+      "name": "corrections-are-event-driven",
+      "note": "The pipeline only ever bends backward (validating -> transforming) on a VALIDATION_FAILED carrying the exact violation. There is no reflect-every-turn cadence: no action exists that re-runs a stage without a concrete failure signal.",
+      "whenState": "docState == 'validating'",
+      "whenAction": "VALIDATION_FAILED"
+    },
+    {
+      "name": "bounded-fix-budget-escalates",
+      "note": "VALIDATION_FAILED with fixAttempts already at 2 escalates to a human (terminal 'escalated', lastViolation recorded) instead of grinding another lap.",
+      "whenState": "docState == 'validating' && fixAttempts >= 2",
+      "whenAction": "VALIDATION_FAILED"
+    },
+    {
+      "name": "stale-completions-reject",
+      "note": "Stage completions arriving in any state other than the stage that awaits them are observable rejections (post == pre), never faults — at-least-once delivery and duplicate signals are safe by construction.",
+      "whenState": "any non-awaiting state",
+      "whenAction": "EXTRACT_DONE | EXTRACT_FAILED | TRANSFORM_DONE | TRANSFORM_FAILED | VALIDATION_PASSED | VALIDATION_FAILED | RENDER_DONE | RENDER_FAILED"
+    }
+  ],
+  "noOpRule": "An action that does not apply in the current state is reject(reason) — an observable no-op with post == pre."
+}

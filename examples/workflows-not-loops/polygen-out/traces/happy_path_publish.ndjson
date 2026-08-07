@@ -1,0 +1,5 @@
+{"pre":{"docState":"received","fixAttempts":0,"lastViolation":""},"action":"START","data":{},"post":{"docState":"extracting","fixAttempts":0,"lastViolation":""}}
+{"pre":{"docState":"extracting","fixAttempts":0,"lastViolation":""},"action":"EXTRACT_DONE","data":{},"post":{"docState":"transforming","fixAttempts":0,"lastViolation":""}}
+{"pre":{"docState":"transforming","fixAttempts":0,"lastViolation":""},"action":"TRANSFORM_DONE","data":{},"post":{"docState":"validating","fixAttempts":0,"lastViolation":""}}
+{"pre":{"docState":"validating","fixAttempts":0,"lastViolation":""},"action":"VALIDATION_PASSED","data":{},"post":{"docState":"rendering","fixAttempts":0,"lastViolation":""}}
+{"pre":{"docState":"rendering","fixAttempts":0,"lastViolation":""},"action":"RENDER_DONE","data":{},"post":{"docState":"published","fixAttempts":0,"lastViolation":""}}

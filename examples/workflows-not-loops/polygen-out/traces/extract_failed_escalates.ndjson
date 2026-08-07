@@ -1,0 +1,4 @@
+{"pre":{"docState":"received","fixAttempts":0,"lastViolation":""},"action":"START","data":{},"post":{"docState":"extracting","fixAttempts":0,"lastViolation":""}}
+{"pre":{"docState":"extracting","fixAttempts":0,"lastViolation":""},"action":"EXTRACT_FAILED","data":{"reason":"unreadable-input"},"post":{"docState":"escalated","fixAttempts":0,"lastViolation":"unreadable-input"}}
+{"pre":{"docState":"escalated","fixAttempts":0,"lastViolation":"unreadable-input"},"action":"EXTRACT_DONE","data":{},"post":{"docState":"escalated","fixAttempts":0,"lastViolation":"unreadable-input"}}
+{"pre":{"docState":"escalated","fixAttempts":0,"lastViolation":"unreadable-input"},"action":"START","data":{},"post":{"docState":"escalated","fixAttempts":0,"lastViolation":"unreadable-input"}}

@@ -1,0 +1,453 @@
+{
+  "tool": "polyvers",
+  "milestone": "M3",
+  "changeId": "f397e2d0b1ec",
+  "oldVersion": "8792884f27eb",
+  "newVersion": "a4582a3aeed6",
+  "lanes": [
+    "shape",
+    "migration",
+    "composition",
+    "vocabulary",
+    "intent",
+    "semantic"
+  ],
+  "diffs": {
+    "shape": {
+      "changed": true,
+      "added": [
+        "lintAttempts"
+      ],
+      "removed": [],
+      "retyped": [
+        "docState"
+      ]
+    },
+    "vocabulary": {
+      "changed": true,
+      "actions": {
+        "added": [
+          "LINT_PASSED",
+          "LINT_FAILED"
+        ],
+        "removed": [],
+        "fieldsChanged": [],
+        "domainChanged": true,
+        "possibleRenames": []
+      },
+      "rejectReasons": {
+        "added": [],
+        "removed": []
+      },
+      "terminal": {
+        "keyChanged": false,
+        "added": [],
+        "removed": [],
+        "changed": false
+      },
+      "effects": {
+        "kindsAdded": [
+          "lint"
+        ],
+        "kindsRemoved": [],
+        "wiringChanged": []
+      }
+    },
+    "intent": {
+      "changed": true,
+      "added": [
+        "state:lint-attempts-within-budget",
+        "transition:pipeline-only-bends-back-on-a-failure-signal",
+        "transition:lint-failure-records-exact-violation",
+        "transition:lint-budget-exhaustion-escalates",
+        "transition:rendering-only-entered-through-lint-pass"
+      ],
+      "removed": [],
+      "renamed": [],
+      "edited": false
+    },
+    "moduleChanged": true,
+    "migrationChanged": true,
+    "mapperChanged": true
+  },
+  "corpus": {
+    "source": "synthesized (BFS-reachable states of the OLD machine — the weakest tier; prefer live or archived snapshots)",
+    "count": 27,
+    "truncated": false,
+    "notes": [],
+    "migrated": true,
+    "migratedCount": 27
+  },
+  "adequacy": {
+    "measured": false
+  },
+  "intentProvenance": null,
+  "gates": [
+    {
+      "gate": "load",
+      "ok": true,
+      "summary": "module surface, validate(), contract/manifest cross-checks",
+      "failures": []
+    },
+    {
+      "gate": "vocabulary",
+      "ok": true,
+      "summary": "cross-version action/effect/reject-reason/terminal vocabulary",
+      "failures": []
+    },
+    {
+      "gate": "invariant-diff",
+      "ok": true,
+      "summary": "strengthened: state:lint-attempts-within-budget, transition:pipeline-only-bends-back-on-a-failure-signal, transition:lint-failure-records-exact-violation, transition:lint-budget-exhaustion-escalates, transition:rendering-only-entered-through-lint-pass",
+      "failures": []
+    },
+    {
+      "gate": "migrate",
+      "ok": true,
+      "summary": "migrate.cjs validated over 27 snapshot(s) (pure, accepted, projection-equal, state+transition invariants hold) — against this corpus tier; polyrun migrate's live dry run remains the apply-time gate",
+      "failures": [],
+      "migratedCorpus": [
+        {
+          "id": "synthesized#0",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "received"
+          },
+          "key": "{\"docState\":\"received\",\"fixAttempts\":0,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#1",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "extracting"
+          },
+          "key": "{\"docState\":\"extracting\",\"fixAttempts\":0,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#2",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "transforming"
+          },
+          "key": "{\"docState\":\"transforming\",\"fixAttempts\":0,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#3",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "unreadable-input",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":0,\"lastViolation\":\"unreadable-input\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#4",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "validating"
+          },
+          "key": "{\"docState\":\"validating\",\"fixAttempts\":0,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#5",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "model-unavailable",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":0,\"lastViolation\":\"model-unavailable\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#6",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "rendering"
+          },
+          "key": "{\"docState\":\"rendering\",\"fixAttempts\":0,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#7",
+          "state": {
+            "fixAttempts": 1,
+            "lastViolation": "missing-title",
+            "lintAttempts": 0,
+            "docState": "transforming"
+          },
+          "key": "{\"docState\":\"transforming\",\"fixAttempts\":1,\"lastViolation\":\"missing-title\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#8",
+          "state": {
+            "fixAttempts": 1,
+            "lastViolation": "broken-schema",
+            "lintAttempts": 0,
+            "docState": "transforming"
+          },
+          "key": "{\"docState\":\"transforming\",\"fixAttempts\":1,\"lastViolation\":\"broken-schema\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#9",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "published"
+          },
+          "key": "{\"docState\":\"published\",\"fixAttempts\":0,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#10",
+          "state": {
+            "fixAttempts": 0,
+            "lastViolation": "render-crashed",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":0,\"lastViolation\":\"render-crashed\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#11",
+          "state": {
+            "fixAttempts": 1,
+            "lastViolation": "missing-title",
+            "lintAttempts": 0,
+            "docState": "validating"
+          },
+          "key": "{\"docState\":\"validating\",\"fixAttempts\":1,\"lastViolation\":\"missing-title\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#12",
+          "state": {
+            "fixAttempts": 1,
+            "lastViolation": "model-unavailable",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":1,\"lastViolation\":\"model-unavailable\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#13",
+          "state": {
+            "fixAttempts": 1,
+            "lastViolation": "broken-schema",
+            "lintAttempts": 0,
+            "docState": "validating"
+          },
+          "key": "{\"docState\":\"validating\",\"fixAttempts\":1,\"lastViolation\":\"broken-schema\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#14",
+          "state": {
+            "fixAttempts": 1,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "rendering"
+          },
+          "key": "{\"docState\":\"rendering\",\"fixAttempts\":1,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#15",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "missing-title",
+            "lintAttempts": 0,
+            "docState": "transforming"
+          },
+          "key": "{\"docState\":\"transforming\",\"fixAttempts\":2,\"lastViolation\":\"missing-title\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#16",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "broken-schema",
+            "lintAttempts": 0,
+            "docState": "transforming"
+          },
+          "key": "{\"docState\":\"transforming\",\"fixAttempts\":2,\"lastViolation\":\"broken-schema\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#17",
+          "state": {
+            "fixAttempts": 1,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "published"
+          },
+          "key": "{\"docState\":\"published\",\"fixAttempts\":1,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#18",
+          "state": {
+            "fixAttempts": 1,
+            "lastViolation": "render-crashed",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":1,\"lastViolation\":\"render-crashed\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#19",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "missing-title",
+            "lintAttempts": 0,
+            "docState": "validating"
+          },
+          "key": "{\"docState\":\"validating\",\"fixAttempts\":2,\"lastViolation\":\"missing-title\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#20",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "model-unavailable",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":2,\"lastViolation\":\"model-unavailable\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#21",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "broken-schema",
+            "lintAttempts": 0,
+            "docState": "validating"
+          },
+          "key": "{\"docState\":\"validating\",\"fixAttempts\":2,\"lastViolation\":\"broken-schema\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#22",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "rendering"
+          },
+          "key": "{\"docState\":\"rendering\",\"fixAttempts\":2,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#23",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "missing-title",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":2,\"lastViolation\":\"missing-title\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#24",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "broken-schema",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":2,\"lastViolation\":\"broken-schema\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#25",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "",
+            "lintAttempts": 0,
+            "docState": "published"
+          },
+          "key": "{\"docState\":\"published\",\"fixAttempts\":2,\"lastViolation\":\"\",\"lintAttempts\":0}",
+          "source": "migrated"
+        },
+        {
+          "id": "synthesized#26",
+          "state": {
+            "fixAttempts": 2,
+            "lastViolation": "render-crashed",
+            "lintAttempts": 0,
+            "docState": "escalated"
+          },
+          "key": "{\"docState\":\"escalated\",\"fixAttempts\":2,\"lastViolation\":\"render-crashed\",\"lintAttempts\":0}",
+          "source": "migrated"
+        }
+      ]
+    },
+    {
+      "gate": "shape-roundtrip",
+      "ok": true,
+      "summary": "setState round-trip over 27 snapshot(s)",
+      "failures": []
+    },
+    {
+      "gate": "stimuli",
+      "ok": true,
+      "summary": "10 old-version stimulus(es) (full declared domain — a conservative superset of in-flight stimuli) × 27 snapshot(s) = 270 deliveries; every outcome must be accepted or a NAMED observable reject",
+      "failures": []
+    },
+    {
+      "gate": "invariants-pointwise",
+      "ok": true,
+      "summary": "5 state invariant(s) × 27 snapshot(s) = 135 checks (11 transition invariant(s) need transitions, not snapshots — checked by the M1 model-check gate)",
+      "failures": []
+    },
+    {
+      "gate": "semantic-model-check",
+      "ok": true,
+      "summary": "exhaustive check from 27 fleet snapshot(s) + init, 64 state(s) checked = 26 seeded from the fleet + 38 discovered from them; one witness per violated rule — not an affected-instance list",
+      "failures": []
+    }
+  ],
+  "deferred": [
+    {
+      "gate": "check-effects",
+      "milestone": "polyrun",
+      "why": "the machine∘mapper composition is gated by `polyrun check-effects` (effect-emission invariants over every reachable path) — not YET by polyvers (a mapper-emission walk cross-checking kinds against the manifest is a recorded follow-up)",
+      "lanes": [
+        "composition"
+      ]
+    },
+    {
+      "gate": "matrix + product",
+      "milestone": "polyvers",
+      "why": "for parent/child fleets a mapper change rewires the cross-machine surface — run `polyvers matrix` (spawn/completion protocol + delivery per rollout pairing) and `polyvers product` (joint interleavings against cross-machine invariants); a delivery-clean pairing can still fail the product check",
+      "lanes": [
+        "composition"
+      ]
+    }
+  ],
+  "verdict": "PASS"
+}

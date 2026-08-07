@@ -1,0 +1,31 @@
+{
+  "effects": {
+    "extract": {
+      "payloadSchema": {},
+      "onSuccess": { "action": "EXTRACT_DONE" },
+      "onFailure": { "action": "EXTRACT_FAILED", "map": { "reason": "$.error.code" } },
+      "onExhausted": { "action": "EXTRACT_FAILED", "data": { "reason": "unreadable-input" } },
+      "retry": { "maxAttempts": 3, "baseMs": 200, "timeoutMs": 5000 }
+    },
+    "transform": {
+      "payloadSchema": { "fixPass": "boolean", "violation": "string" },
+      "onSuccess": { "action": "TRANSFORM_DONE" },
+      "onFailure": { "action": "TRANSFORM_FAILED", "map": { "reason": "$.error.code" } },
+      "onExhausted": { "action": "TRANSFORM_FAILED", "data": { "reason": "model-unavailable" } },
+      "retry": { "maxAttempts": 4, "baseMs": 300, "timeoutMs": 30000 }
+    },
+    "validate": {
+      "payloadSchema": {},
+      "onSuccess": { "action": "VALIDATION_PASSED" },
+      "onFailure": { "action": "VALIDATION_FAILED", "map": { "violation": "$.error.code" } },
+      "retry": { "maxAttempts": 2, "baseMs": 200, "timeoutMs": 5000 }
+    },
+    "render": {
+      "payloadSchema": {},
+      "onSuccess": { "action": "RENDER_DONE" },
+      "onFailure": { "action": "RENDER_FAILED", "map": { "reason": "$.error.code" } },
+      "onExhausted": { "action": "RENDER_FAILED", "data": { "reason": "render-crashed" } },
+      "retry": { "maxAttempts": 3, "baseMs": 200, "timeoutMs": 5000 }
+    }
+  }
+}

@@ -19,6 +19,7 @@ polyrun/demo/.demo-state/
 examples/polyrun-oms/.oms-state/
 examples/polygraph-oms-go/harness/*.exe
 examples/polyrun-oms/demo/.demo-state/
+examples/workflows-not-loops/demo/.demo-state/
 
 # Personal drafts — not part of the project
 docs/linkedin-*.md

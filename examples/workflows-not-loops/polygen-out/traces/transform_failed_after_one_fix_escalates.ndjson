@@ -1,0 +1,7 @@
+{"pre":{"docState":"received","fixAttempts":0,"lastViolation":""},"action":"START","data":{},"post":{"docState":"extracting","fixAttempts":0,"lastViolation":""}}
+{"pre":{"docState":"extracting","fixAttempts":0,"lastViolation":""},"action":"EXTRACT_DONE","data":{},"post":{"docState":"transforming","fixAttempts":0,"lastViolation":""}}
+{"pre":{"docState":"transforming","fixAttempts":0,"lastViolation":""},"action":"TRANSFORM_DONE","data":{},"post":{"docState":"validating","fixAttempts":0,"lastViolation":""}}
+{"pre":{"docState":"validating","fixAttempts":0,"lastViolation":""},"action":"VALIDATION_FAILED","data":{"violation":"missing-title"},"post":{"docState":"transforming","fixAttempts":1,"lastViolation":"missing-title"}}
+{"pre":{"docState":"transforming","fixAttempts":1,"lastViolation":"missing-title"},"action":"TRANSFORM_FAILED","data":{"reason":"model-unavailable"},"post":{"docState":"escalated","fixAttempts":1,"lastViolation":"model-unavailable"}}
+{"pre":{"docState":"escalated","fixAttempts":1,"lastViolation":"model-unavailable"},"action":"TRANSFORM_DONE","data":{},"post":{"docState":"escalated","fixAttempts":1,"lastViolation":"model-unavailable"}}
+{"pre":{"docState":"escalated","fixAttempts":1,"lastViolation":"model-unavailable"},"action":"VALIDATION_PASSED","data":{},"post":{"docState":"escalated","fixAttempts":1,"lastViolation":"model-unavailable"}}
