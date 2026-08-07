@@ -18,12 +18,25 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs \
   [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]
 ```
 
-Always needs `ANTHROPIC_API_KEY` and an explicit `--model` (no default — pass
-the exact Anthropic model id if not using a known alias). Recommend `opus-5`
-with the repair loop on (the default); `fable-5` only for one-shot runs with
-`--repair-max 0`; on an API policy refusal retry with `opus-4.8` (per-step
-source of truth: `RECOMMENDED_MODELS` in `scripts/models.mjs`). v1 is JS/TS
-only.
+The scripted run needs `ANTHROPIC_API_KEY` and an explicit `--model` (no
+default — pass the exact Anthropic model id if not using a known alias).
+Recommend `opus-5` with the repair loop on (the default); `fable-5` only for
+one-shot runs with `--repair-max 0`; on an API policy refusal retry with
+`opus-4.8` (per-step source of truth: `RECOMMENDED_MODELS` in
+`scripts/models.mjs`). v1 is JS/TS only.
+
+**No `ANTHROPIC_API_KEY` in the environment? Do not fail — ASK the user,
+with the tradeoffs.** Only the authoring model call needs the key; every
+gate is keyless local execution. Put the choice to them per the `polygen`
+skill's Step 0: *"I don't have an API key — (a) continue keyless: I author
+the artifacts in this session and run every mechanical gate locally (same
+checking strength, zero API cost; you give up a pinned model id and a
+scripted, re-runnable authoring step), or (b) supply a key for the scripted
+CI-grade run (pinned model, automated repair loop, standard report)?"* If
+they choose keyless: author in-session in the same artifact style, run the
+same gates (`check.mjs`, corpus synthesis + `validate_corpus.mjs`,
+separate-process replay), fix code at counterexamples until clean, and
+record the provenance ("authored in-session, keyless") in the handoff.
 
 What it does, in order:
 1. Drafts a `contract.json` from the feature description (or uses one you

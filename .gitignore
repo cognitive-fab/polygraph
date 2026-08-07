@@ -25,6 +25,7 @@ examples/todo-machine/demo/.demo-state/
 # Personal drafts — not part of the project
 docs/linkedin-*.md
 docs/draft-*.md
+docs/private/
 
 # Eval — traces, generated specs, and results are regenerated on demand
 eval/machines/*/traces/

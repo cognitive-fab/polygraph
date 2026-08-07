@@ -294,13 +294,19 @@ on Node ≥ 20.
 | Escalate to TLA+/TLC | `verify.mjs --tla` | **no** | mechanical transpile + local TLC (needs Java + `tla2tools.jar` via `POLYGRAPH_JAVA` / `POLYGRAPH_TLA_JAR`) |
 | Elicit / grade / drift-check invariants (polynv) | `polynv/bin/polynv.mjs harvest\|grade\|drift…` | **no** | templates, miners, pre-checks, mutation grade — all local exploration |
 | **Generate specs from source** | `verify.mjs --source … --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM writes the specs |
-| **Author new code (polygen)** | `polygen.mjs --intent … --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM drafts contract, code, and invariants |
+| **Author new code (polygen, scripted)** | `polygen.mjs --intent … --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM drafts contract, code, and invariants — pinned model, automated repair loop, reproducible in CI |
+| **Author new code (in-session, keyless)** | the `polygen` skill, Step 0 | **no** | in a Claude Code session the assistant authors the same artifacts and runs the same local gates; an A/B against the scripted run produced behaviorally identical machines (270/270 edges — `examples/workflows-not-loops/README.md`) |
 | **Headless LLM harvest (polynv)** | `polynv … harvest --llm --model …` | **yes** (`ANTHROPIC_API_KEY`) | the LLM proposes domain priors + code-reading candidates (in a Claude Code session this source needs no key — the assistant supplies it) |
 
-This applies inside Claude Code too: the skills and subagents shell out to
-these same scripts, so the generate and polygen steps need
-`ANTHROPIC_API_KEY` set in your environment — your Claude Code session
-credentials are not used for them.
+Inside Claude Code the *scripted* generate and polygen steps still need
+`ANTHROPIC_API_KEY` in your environment — your session credentials are not
+used for them. But the key is a **choice, not a gate**: with no key, the
+polygen skill authors in-session and every checker still runs (the guarantee
+lives in the local gates, not in who typed the code), and polynv's LLM
+source is likewise supplied by the session. Add the key when you want the
+CI-grade properties — a pinned model id and a rerunnable, scripted authoring
+step. The typical split: individuals adopt keyless; enterprises wiring
+authoring/generation into CI use the key.
 
 ## Install
 
@@ -382,6 +388,8 @@ the entry points directly:
 | `polyrun` | execute **CLI** | run a verified machine durably — state, effects, timers, children — and keep checking it in production (no API key) |
 | `/polygraph:polynv` | elicit **skill / command** | find the invariants themselves: harvested + pre-checked candidates, domain priors, a plugin-led interview, a mutation grade of the result (no API key) |
 | `polynv` | elicit **subagent** | prepare the interview autonomously (harvest, pre-check, grade, ranked questions) — the interview itself stays with you |
+| `/polygraph:workflow` | compose **skill / command** | build a feature as a workflow, not an agentic loop: stages along the data flow, event-driven corrections with bounded budgets, the model as one well-scoped handler — drives polygen → check-effects → polyrun end-to-end (see `examples/workflows-not-loops/MANUAL.md`) |
+| `capture-ready` | author **skill** (any language) | write stateful code instrumented by construction — the eight CR requirements from `docs/capture-ready.md`, so a trace corpus falls out of a listener registration and verification never needs a retrofit; the floor beneath polygen for every language it can't author |
 
 ## Use it as a plain CLI (no Claude Code)
 
@@ -496,8 +504,12 @@ back.
 .claude-plugin/plugin.json   plugin manifest
 skills/                      the methods, as instructions Claude follows:
                              polygraph (audit), polygen (author),
-                             polyvers (version), polynv (elicit)
-commands/                    /polygraph:verify, :polygen, :polyvers, :polynv
+                             polyvers (version), polynv (elicit),
+                             workflow (compose: build it as a workflow,
+                             not a loop), capture-ready (author stateful
+                             code instrumented by construction, any language)
+commands/                    /polygraph:verify, :polygen, :polyvers, :polynv,
+                             :workflow
 agents/                      polygraph-verifier, polygen, polyvers, polynv subagents
 scripts/                     the shared core: sam-tv.mjs (replayer),
                              check.mjs (model checker), to-tla.mjs +

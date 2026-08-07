@@ -83,6 +83,53 @@ cross-checks that contract and code agree on their action/data vocabulary.
 narrates the real run where this collapsed the explorable state space —
 including a false positive the fix itself introduced.
 
+## Capture-ready by construction
+
+There is a second reason to author in SAM v2 that has nothing to do with
+verification aesthetics: **code polygen writes ships with its trace-capture
+path already working.**
+
+For code we did not write, capture is a retrofit — find a seam, instrument a
+copy, keep a patch, hope the patch still applies after the target moves. For a
+SAM v2 strict-profile module, none of that exists. There is one named step
+boundary, `getState()` already projects exactly the contract's declared keys,
+every not-applicable action is an observable `reject(reason)` rather than a
+throw, and the framework fires a `stepListener` once per presented action.
+Capture is a listener registration:
+
+```js
+const control = instance({ initialState, component });
+withSamTracingV2(instance, 'traces/happy.ndjson');
+```
+
+Rejected steps come out as windows too, so no-ops are recorded rather than
+inferred.
+
+The full rule — eight shape requirements, CR-1..CR-8 — is
+[`capture-ready.md`](capture-ready.md). The artifact gives you five of them for
+free. **Three are yours to hold while authoring**, and they are the ones a
+generated module most often gets wrong:
+
+- **CR-5 — inject non-determinism.** `Date.now()`, `Math.random()` and UUID
+  generation belong in config ports, not inside a transition. A machine that
+  reads the clock ambiently cannot be re-captured deterministically at a
+  declared seed.
+- **CR-6 — declare effects, execute at the edge.** The transition records
+  intent; the caller performs the I/O. This is also what makes the module
+  runnable under [polyrun](../polyrun/README.md), whose journal is the
+  strongest corpus available anywhere in the system.
+- **CR-7 — scenarios as exported functions.** polygen already drives the final
+  code through model-proposed scenarios to synthesize its corpus; keeping those
+  drivers as plain exported functions means the same file serves the regression
+  corpus and any later capture run.
+
+Note the provenance boundary this does *not* cross: polygen's synthesized
+corpus is a **regression** corpus. A corpus derived from a spec is not
+admissible as conformance evidence for that spec — replaying it proves only
+that the spec agrees with itself. Capture-readiness is what makes the *real*
+corpus cheap to collect once the module is wired into a running system, which
+is Step 3 of the handoff below.
+
 ## The handoff is deliberately manual
 
 polygen hands you artifacts, not a merge. Three steps stay with you, in

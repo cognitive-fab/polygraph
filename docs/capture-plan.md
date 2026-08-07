@@ -47,7 +47,8 @@ the deterministic side of that line, which is why it is worth building.
 
 ## 1. The capture harness should be a committed artifact
 
-**The real gap.** Step 2 tells the agent to instrument a *copy* and keep the
+**The real gap** — specified in full in [`capture-spec.md`](capture-spec.md).
+Step 2 tells the agent to instrument a *copy* and keep the
 change as a diff/patch. Nothing requires that harness to be committed, named,
 or re-runnable. That is fine for a one-off audit and wrong for everything that
 has to happen twice.
@@ -157,11 +158,19 @@ The capture problem only exists for code the agent did not write. When polygen
 authors a module, it is SAM v2 — so `withSamTracing` gives free, complete,
 no-op-inclusive capture forever, with no shim to write and no seam to find.
 
-Worth making explicit policy rather than leaving it an emergent property:
-**stateful code authored through this toolchain ships with its capture path
-already working.** That is a real argument for authoring in SAM v2 that has
-nothing to do with verification aesthetics, and it should be said out loud in
-`docs/polygen.md`.
+This is now explicit policy rather than an emergent property: **stateful code
+authored through this toolchain ships with its capture path already working.**
+The eight shape requirements are in
+[`capture-ready.md`](capture-ready.md) (CR-1..CR-8), stated as
+authoring guidance for polygen and for any session writing a state machine by
+hand. That is a real argument for authoring in SAM v2 that has nothing to do
+with verification aesthetics.
+
+It also changes what §1 has to build. A capture-ready module needs no
+`instrument.patch` — the harness is a manifest, seeded scenarios and a listener
+registration — which removes patch rot (`capture-spec.md` §12 Q1) and target
+drift (FR-6.1) for everything we author. The patch path remains for retrofitted
+targets.
 
 ## Sequencing
 

@@ -123,6 +123,16 @@ settles.
   (`@cognitive-fab/sam-pattern`, optionally with `sam-fsm`) — it wraps the
   `component` config so every dispatch emits a window, no-ops included. For other
   languages, write a small emitter by hand following the same shape.
+- **Check for an existing seam before writing one.** If the target already
+  exposes a step listener / observer / middleware hook, register on it — that
+  is a stable attachment point, unlike a patch that rots when the code moves.
+  Code authored through this toolchain always has one
+  (`docs/capture-ready.md`); code polygen wrote is captured with
+  `withSamTracingV2(instance, file)` and needs no shim at all. Only instrument
+  a copy when no seam exists. Do NOT reshape someone else's target to make
+  capture easier — that changes the thing under audit. (If you are separately
+  fixing or authoring code in that repo, `docs/capture-ready.md` is what to
+  shape it toward.)
 - **Capture by event subscription, never by polling.** Hook the target's own
   event/observer/callback surface (a dispatch wrapper, a reducer tap, the
   library's Observer mechanism) so every transition emits a window. Treat
