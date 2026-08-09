@@ -391,6 +391,24 @@ the entry points directly:
 | `/polygraph:workflow` | compose **skill / command** | build a feature as a workflow, not an agentic loop: stages along the data flow, event-driven corrections with bounded budgets, the model as one well-scoped handler — drives polygen → check-effects → polyrun end-to-end (see `examples/workflows-not-loops/MANUAL.md`) |
 | `capture-ready` | author **skill** (any language) | write stateful code instrumented by construction — the eight CR requirements from `docs/capture-ready.md`, so a trace corpus falls out of a listener registration and verification never needs a retrofit; the floor beneath polygen for every language it can't author |
 
+### Installing into an existing project — take the inventory first
+
+On a codebase you didn't just write, the entry points above leave one question
+unanswered: *what do you point them at?* Before running anything, have Claude
+survey the repo and rank what is actually worth verifying — every stateful unit
+scored on the rule it must never break, its blast radius, whether it has the
+retries/timeouts/races where model checking pays, and what a trace corpus would
+cost given `capture-ready`'s CR-1..CR-8.
+
+The prompt for that pass is
+[`docs/polygraph-inventory-prompt.md`](docs/polygraph-inventory-prompt.md) —
+paste it at the root of your project and it writes a ranked
+`docs/polygraph-inventory.md` ending in one recommended first target and the
+command to run on it. It is read-only; it changes nothing. Two things it tends
+to surface early: the same conceptual machine implemented twice, and candidates
+where nobody can state an invariant — which is a job for `/polygraph:polynv`
+before it is a job for `/polygraph:verify`.
+
 ## Use it as a plain CLI (no Claude Code)
 
 ```bash

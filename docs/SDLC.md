@@ -41,6 +41,12 @@ The division of labor, stated once and used everywhere:
 - **A change to ship to a fleet already running?** → Phase 7 (evolve with
   polyvers) — the compatibility path, not the correctness path.
 
+On an existing codebase, the prior question is *which unit* goes through a
+door at all. `docs/polygraph-inventory-prompt.md` is the read-only survey
+pass that answers it — it ranks the repo's stateful units by invariant at
+stake, blast radius, combinatorial risk, and capture cost (CR-1..CR-8), and
+names one first target.
+
 There is no wrong door: the engines share one artifact family, so an audit
 produces the contract an author would have written, and an authored machine
 produces the traces an audit would have captured. What matters is naming
