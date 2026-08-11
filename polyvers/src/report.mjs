@@ -52,6 +52,8 @@ export function renderReport(r) {
     ? `**Invariant adequacy:** the intent artifact kills ${r.adequacy.killed}/${r.adequacy.distinct} behaviorally distinct machine mutant(s)${r.adequacy.survivors ? ` — ${r.adequacy.survivors} unconstrained behavior class(es) open` : ''} (polynv grade)`
     : r.adequacy?.stale
       ? `**Invariant adequacy:** STALE — the invariants changed after the last \`polynv grade\`; the recorded score no longer describes this intent artifact (regrade to restore the disclosure)`
+      : r.adequacy?.outdatedFaultModel
+        ? `**Invariant adequacy:** OUTDATED FAULT MODEL — the recorded grade was measured under fault-model v${r.adequacy.outdatedFaultModel.measured} (current v${r.adequacy.outdatedFaultModel.current} adds the verdict and schema families); its kill-rate is not comparable and says nothing about the new fault classes (\`polynv grade\` to re-measure)`
       : r.adequacy?.unreadable
         ? `**Invariant adequacy:** UNREADABLE — an intent-ledger.json is present but could not be parsed (${r.adequacy.unreadable}); fix or regenerate it — this is not the same as never graded`
         : r.adequacy?.unverifiable

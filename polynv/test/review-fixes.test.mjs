@@ -141,6 +141,25 @@ test('compat-report: STALE and UNREADABLE adequacy variants render distinctly', 
   const base = { classification, corpusInfo: { source: 'test', count: 1 }, gateResults: [{ gate: 'g', ok: true, summary: 's', failures: [] }] };
   assert.match(renderReport(buildReport({ ...base, adequacy: { measured: false, stale: true } })), /STALE — the invariants changed after the last/);
   assert.match(renderReport(buildReport({ ...base, adequacy: { measured: false, unreadable: 'Unexpected token' } })), /UNREADABLE — an intent-ledger\.json is present but could not be parsed/);
+  // 8.0: a grade measured under the pre-8.0 operator set is disclosed as an
+  // old-fault-model measurement, never presented as a current kill-rate.
+  assert.match(renderReport(buildReport({ ...base, adequacy: { measured: false, outdatedFaultModel: { measured: 1, current: 2 } } })), /OUTDATED FAULT MODEL — the recorded grade was measured under fault-model v1 \(current v2/);
+});
+
+test('polynv report: an unstamped (pre-8.0) grade is OUTDATED and does not satisfy convergence', async () => {
+  const { buildStatus } = await import('../src/report.mjs');
+  const rec = { id: 'r1', status: 'confirmed', events: [], precheck: { verdict: 'HOLDS' } };
+  // Unstamped grade (pre-8.0 fault model): convergence must NOT be granted.
+  const oldLedger = { format: 'polynv-ledger/1', records: [rec], grade: { killed: 5, distinct: 6, survivors: [], dropped: 0 } };
+  const sOld = buildStatus(oldLedger);
+  assert.equal(sOld.verdict, 'PARTIAL');
+  assert.equal(sOld.gradeOutdated, true);
+  assert.match(sOld.adequacyGrade, /OUTDATED — measured under fault-model v1/);
+  // Current-stamp grade: converged as before.
+  const newLedger = { format: 'polynv-ledger/1', records: [rec], grade: { faultModel: 2, killed: 5, distinct: 6, survivors: [], dropped: 0 } };
+  const sNew = buildStatus(newLedger);
+  assert.equal(sNew.verdict, 'CONVERGED');
+  assert.equal(sNew.gradeOutdated, false);
 });
 
 // ── M3: intent-diff provenance annotation in the compat-report ──────────────

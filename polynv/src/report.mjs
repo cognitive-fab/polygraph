@@ -6,6 +6,8 @@
 // assignee where questions are deferred, and `polynv report` exits 1.
 'use strict';
 
+import { FAULT_MODEL_VERSION, faultModelOf } from './ledger.mjs';
+
 export function buildStatus(ledger) {
   const counts = {};
   for (const r of ledger.records) counts[r.status] = (counts[r.status] ?? 0) + 1;
@@ -22,7 +24,12 @@ export function buildStatus(ledger) {
   // M2 semantics: convergence REQUIRES the adequacy grade — an interview
   // where every question was answered but invariant-set strength was never
   // measured is PARTIAL, per the review's convergence redefinition (plan §3).
-  const graded = !!ledger.grade;
+  // A grade measured under an OLDER fault model is not a current measurement:
+  // 8.0 added fault families (verdict, schema) the old operators cannot
+  // express, so an old kill-rate says nothing about them. It is reported as
+  // outdated and does NOT satisfy convergence-requires-grade.
+  const gradeOutdated = !!ledger.grade && faultModelOf(ledger.grade) < FAULT_MODEL_VERSION;
+  const graded = !!ledger.grade && !gradeOutdated;
   return {
     verdict: open.length === 0 && ledger.records.length > 0 && graded ? 'CONVERGED' : 'PARTIAL',
     counts,
@@ -35,8 +42,11 @@ export function buildStatus(ledger) {
     templateCoverage: { dispositioned: templatesDone.length, total: templates.length },
     adequacyGrade: graded
       ? `kills ${ledger.grade.killed}/${ledger.grade.distinct} behaviorally distinct mutant(s); ${ledger.grade.survivors.length} survivor(s)${ledger.grade.dropped ? `; ${ledger.grade.dropped} operator(s) dropped by --max-mutants` : ''}`
-      : 'NOT MEASURED — run `polynv grade`; convergence requires it',
+      : gradeOutdated
+        ? `OUTDATED — measured under fault-model v${faultModelOf(ledger.grade)} (current v${FAULT_MODEL_VERSION}: + verdict and schema families); the kill-rate is not comparable and says nothing about the new fault classes — re-run \`polynv grade\``
+        : 'NOT MEASURED — run `polynv grade`; convergence requires it',
     graded,
+    gradeOutdated,
   };
 }
 

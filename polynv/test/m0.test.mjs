@@ -197,7 +197,7 @@ test('report: PARTIAL with open records, CONVERGED when all terminal; findings n
   s = buildStatus(ledger);
   assert.equal(s.verdict, 'PARTIAL');
   assert.ok(s.adequacyGrade.includes('NOT MEASURED'));
-  ledger.grade = { killed: 1, distinct: 1, survivors: [], dropped: 0 };
+  ledger.grade = { faultModel: 2, killed: 1, distinct: 1, survivors: [], dropped: 0 }; // stamped: a CURRENT-model grade (the unstamped case is covered in review-fixes)
   s = buildStatus(ledger);
   assert.equal(s.verdict, 'CONVERGED');
   // a confirmed-but-FAILS record is a named finding

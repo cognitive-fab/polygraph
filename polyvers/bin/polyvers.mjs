@@ -325,9 +325,16 @@ try {
               const stale =
                 (g.ledgerOracleHash && polynvLedger.oracleHashOf(ledger) !== g.ledgerOracleHash) ||
                 (g.invariantsFileHash && newA.invariantsHash && g.invariantsFileHash !== newA.invariantsHash);
+              // Fault-model staleness (8.0): a grade measured under an older
+              // operator set is disclosed as such, never presented as a
+              // current kill-rate — the new fault families (verdict, schema)
+              // are outside what it measured.
+              const outdated = polynvLedger.faultModelOf(g) < polynvLedger.FAULT_MODEL_VERSION;
               adequacy = stale
                 ? { measured: false, stale: true }
-                : { measured: true, killed: g.killed, distinct: g.distinct, survivors: g.survivors?.length ?? 0 };
+                : outdated
+                  ? { measured: false, outdatedFaultModel: { measured: polynvLedger.faultModelOf(g), current: polynvLedger.FAULT_MODEL_VERSION } }
+                  : { measured: true, killed: g.killed, distinct: g.distinct, survivors: g.survivors?.length ?? 0 };
             }
           }
           if (Object.keys(prov).length) intentProvenance = prov;

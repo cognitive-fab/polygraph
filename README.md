@@ -667,6 +667,73 @@ trace validation is what makes LLM-generated specs trustworthy.
 
 If you use Polygraph in your work, please cite the paper (see `CITATION.cff`).
 
+## Migrating from 7.x
+
+8.0.0 removes the 1.x bare-next artifact entirely. Every failure below is
+loud and names its remedy — nothing degrades silently — but here is the
+whole list in one place.
+
+**`--legacy-bare-next` is gone.** Any script or CI job passing it exits with
+a usage error. Drop the flag; the v2 SAM strict profile is the only
+artifact.
+
+**Saved bare-next specs are refused.** A module exporting
+`next(state, action, data)` is rejected by name at every stage (replayer,
+checker, mutation control, polygen's gate). Two paths forward:
+
+- *Generated specs* — delete the saved `specs/` dir and re-run
+  `/polygraph:verify` in generation mode; it writes v2 modules.
+- *Hand-written machines* — port to the v2 surface. The recipe is small and
+  mechanical: acceptors compute the same next-values your `next()` did, and
+  every identity fall-through becomes an observable `reject(reason)`.
+  Worked examples: [`examples/turnstile-v2/specs/reference.js`](examples/turnstile-v2/specs/reference.js)
+  and the eight ports in `eval/machines/*/reference.cjs` (each one is a
+  before/after pair with its 1.x original in git history, proven
+  transition-table-identical before the swap).
+
+**Machines with reactors or `derived:` modelShape keys are refused by the
+checker.** The checkable profile pins `reactors: []`; state computed outside
+the acceptor step cannot be explored faithfully. Move reactor-computed
+values into acceptor-written state. (`internal: true` keys remain legal but
+are now reported as structurally unexplored — promote them to observable
+keys if behavior gates on them.)
+
+**polynv grades re-measure under a larger fault model.** 8.0 adds the
+verdict family (`silence`, `reason-swap`) and the schema family
+(`schema-weaken`) beside the classic relation four. Consequences:
+
+- A pre-8.0 grade renders as **OUTDATED FAULT MODEL** (in `polynv report`
+  and the polyvers compat-report) and no longer satisfies
+  convergence-requires-grade — re-run `polynv grade`.
+- Expect new survivors on the first re-grade: the verdict family is
+  killable only by the new `rejectionInvariants` class, which your
+  invariants.mjs will not have yet. That is the elicitation loop working —
+  each survivor is a question, not a regression.
+
+**New invariant class: `rejectionInvariants`.** Obligations about the
+rejection itself, unstatable before:
+
+```js
+export const rejectionInvariants = [{
+  name: 'push-locked-must-reject',
+  pred: (state, action, data, v) =>
+    !(action === 'PUSH' && state.state === 'LOCKED')
+    || (v && v.rejected && v.reason === 'push-while-locked-is-noop'),
+}];
+```
+
+**New warnings on previously-quiet runs.** The exhaustive tier now
+cross-checks the contract's `specialRules` (a declared rejection that never
+fires over the explored graph is flagged) and reports `internal:` keys as
+blind spots. Both are findings about the contract/machine pair, not noise —
+read them once, then either fix the disagreement or accept it knowingly.
+
+**For script-level users of `scripts/`:** `makeSamAdapter` returns
+`{ init, step, transition }` (`step()` carries `{ state, verdict, reason }`);
+`replaySpec`/`replaySpecResults` no longer take a `mode`; `check()` no longer
+accepts `legacyBareNext` or `windows`; `buildDomain` is the contract-side
+domain view only.
+
 <details>
 <summary>Legacy 1.x artifact (removed in 8.0.0)</summary>
 

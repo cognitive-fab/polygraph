@@ -3,6 +3,24 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 8.1.0 — 2026-08-11
+
+**Grades carry their fault-model version; a migration guide lands in the
+README.**
+
+- `runGrade` stamps `grade.faultModel` (`FAULT_MODEL_VERSION = 2`; an
+  unstamped grade is pre-8.0 = v1, the relation-only four operators). A
+  grade below the current version renders as **OUTDATED FAULT MODEL** in
+  `polynv report` (and no longer satisfies convergence-requires-grade) and
+  in the polyvers compat-report's adequacy line — an old kill-rate is never
+  presented as a current measurement, since the verdict and schema fault
+  families are outside what it measured.
+- README gains **"Migrating from 7.x"**: the removed flag, porting saved
+  bare-next specs (with the worked before/after ports as templates), the
+  reactor/derived-key refusal, the re-grade expectation (new survivors are
+  elicitation questions, not regressions), a `rejectionInvariants` example,
+  and the script-level API changes.
+
 ## 8.0.0 — 2026-08-10
 
 **The 1.x bare-next artifact is removed, and the toolset becomes pure

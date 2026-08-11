@@ -9,6 +9,16 @@
 // must earn its own confirmation).
 'use strict';
 
+// Fault-model version of the mutation grade. v1 (pre-8.0, unstamped) is the
+// relation-only four (drop/retarget/widen/freeze); v2 (8.0) adds the verdict
+// family (silence, reason-swap) and the schema family (schema-weaken).
+// Kill-rates are only comparable within one version — consumers must treat a
+// grade whose stamp is below CURRENT as measured under an older fault model,
+// never as a current measurement.
+export const FAULT_MODEL_VERSION = 2;
+export const faultModelOf = (grade) => grade?.faultModel ?? 1; // unstamped = pre-8.0
+
+
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { compile } from './nf.mjs';
