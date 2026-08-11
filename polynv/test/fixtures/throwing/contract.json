@@ -1,0 +1,11 @@
+{
+  "stateKeys": [
+    { "name": "st", "type": "enum: 'a' | 'b'" },
+    { "name": "n", "type": "integer >= 0" }
+  ],
+  "initState": { "st": "a", "n": 0 },
+  "actions": { "GO": { "dataFields": {} }, "BOOM": { "dataFields": {} } },
+  "dataDomain": { "GO": {}, "BOOM": {} },
+  "terminalKey": "st",
+  "terminalStates": ["b"]
+}

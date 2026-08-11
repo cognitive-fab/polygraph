@@ -1,6 +1,7 @@
 # Subscription billing example
 
-A synthetic worked example of the bare-next() method: a subscription billing
+A synthetic worked example of the method as it stood in 1.x (the bare-next()
+artifact, removed in 8.0.0): a subscription billing
 state machine (`source.cjs`) with states
 `trialing`/`active`/`past_due`/`canceled`, actions `TRIAL_END`/`CHARGE`/
 `RETRY`/`CANCEL`, and a dunning retry counter. It exercises the whole

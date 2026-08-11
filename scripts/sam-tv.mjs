@@ -48,7 +48,7 @@ const missing = ['instance', 'init', 'getState', 'setState'].filter((f) => typeo
 if (!mod || typeof mod.actions !== 'object' || mod.actions === null) missing.push('actions');
 if (missing.length) {
   const hint = mod && typeof mod.next === 'function'
-    ? ' (module exports next() — a legacy bare-next spec; replay it with --legacy-bare-next / tv.mjs)'
+    ? ' (module exports a bare next() — the 1.x artifact, removed in 8.0.0; author a SAM v2 strict-profile module)'
     : '';
   console.log(JSON.stringify({ ok: false, error: `module is not a v2 SAM spec — missing export(s): ${missing.join(', ')}${hint}` }));
   process.exit(0);

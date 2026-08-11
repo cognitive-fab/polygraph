@@ -36,7 +36,7 @@ function resolveInvariantsPath(opts, contract) {
 // The flags that ARE boolean. Every other flag takes a value — inferring
 // "boolean" from the next token being a flag turned `--n --tla` into
 // `n: true` (and `Number(true) === 1`), silently gutting the N-way vote.
-const BOOLEAN_FLAGS = new Set(['legacy-bare-next', 'tla', 'no-auto-regen']);
+const BOOLEAN_FLAGS = new Set(['tla', 'no-auto-regen']);
 
 function parseArgs(argv) {
   const a = {};
@@ -88,10 +88,8 @@ export async function verify(opts) {
   if (!windows.length) throw new Error(`no trace windows found in ${opts.traces} (looked for *.ndjson with at least one window)`);
   const outDir = opts.out || 'out';
   mkdirSync(outDir, { recursive: true });
-  // Artifact mode (Option A full switch): the default artifact is a v2 SAM
-  // strict-profile module; --legacy-bare-next selects the bare next() contract
+
   // end-to-end (replayer, checker domain source, and — once wired — prompts).
-  const mode = opts['legacy-bare-next'] || opts.legacyBareNext ? 'legacy' : 'sam';
 
   // Obtain spec file paths.
   let specPaths = [];
@@ -120,18 +118,16 @@ export async function verify(opts) {
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set (or use --specs to replay saved specs)');
     const source = readFileSync(opts.source, 'utf-8');
     const lang = contract.lang || (String(opts.source).endsWith('.ts') ? 'typescript' : 'javascript');
-    // Prompt selection follows the artifact mode end-to-end: 'sam' (default)
-    // builds the v2 strict-profile prompt (prompt_template_v2.txt — modelShape
-    // / intent schemas / domains / reject() rules rendered from the contract);
-    // 'legacy' builds the bare-next prompt_template.txt. Note the v2 path
-    // hard-requires a dataDomain entry for every declared data field
+    // The prompt is the v2 strict-profile one (prompt_template_v2.txt —
+    // modelShape / intent schemas / domains / reject() rules rendered from the
+    // contract). It hard-requires a dataDomain entry for every declared field
     // (buildPrompt throws otherwise — the domain is also the exploration and
     // transpilation domain, so a gap must block generation loudly).
     // windows threads the real corpus into the v2 renderers: union-typed
     // state keys (observed as more than one runtime type across pre/post)
     // render as untyped `{}` instead of trapping every generation with a
     // single-type declaration the strict checker throws on.
-    const prompt = buildPrompt(contract, source, { filePath: opts.source, lang, mode, windows });
+    const prompt = buildPrompt(contract, source, { filePath: opts.source, lang, windows });
     const maxTokens = posInt(opts['max-tokens'], 'max-tokens', undefined);
     genContext = { prompt, model: opts.model, n: posInt(opts.n, 'n', 5), apiKey, maxTokens };
     const gen = opts._generateSpecs || generateSpecs; // test seam (selftest drives generation+regen without an API)
@@ -145,14 +141,14 @@ export async function verify(opts) {
     if (!specPaths.length) throw new Error('no specs generated');
   }
 
-  // Replay every spec; build a per-window status matrix. In 'sam' mode each
-  // result additionally carries the step classification from lastStep()
+  // Replay every spec; build a per-window status matrix. Each result carries
+  // the step classification from lastStep()
   // ('mutated' | 'rejected' | 'identity-by-mutation' | 'unhandled', plus
   // rejectionReason) — new triage evidence: a failing no-op window now says
   // WHY the spec did nothing. Wrapped as a function so the auto-regeneration
   // pass (below) can score a second spec set with identical rules.
   const analyzeSpecs = (paths) => {
-  const detail = paths.map((p) => replaySpecResults(p, windows, mode)); // detail[spec]
+  const detail = paths.map((p) => replaySpecResults(p, windows)); // detail[spec]
   const matrix = detail.map((resp) =>
     resp.ok ? resp.results.map((r) => r.status) : windows.map(() => 'unscoreable')); // matrix[spec][window]
 
@@ -221,7 +217,7 @@ export async function verify(opts) {
 
   const perWindow = windows.map((w, wi) => {
     const statuses = liveIdx.map((si) => matrix[si][wi]);
-    // Per-live-spec step classifications ('sam' mode; legacy tv.mjs has none).
+    // Per-live-spec step classifications from the replayer.
     // 'rejected' and 'identity-by-mutation' are the two GOOD no-op classes;
     // 'unhandled' on a failing window is a first-class finding — the spec
     // neither acted nor rejected.
@@ -290,7 +286,7 @@ export async function verify(opts) {
   // regenerate ONCE with the offending branches called out instead of making
   // the operator notice and re-run by hand. Generation mode + sam only; one
   // extra API round at most; --no-auto-regen opts out; both passes reported.
-  if (genContext && mode === 'sam' && !(opts['no-auto-regen'] || opts.noAutoRegen)) {
+  if (genContext && !(opts['no-auto-regen'] || opts.noAutoRegen)) {
     const uniform = analysis.perWindow
       .map((e, i) => ({ e, i }))
       .filter(({ e }) => e.rejectedButCodeActed
@@ -356,7 +352,7 @@ export async function verify(opts) {
   }
   if (invPath) {
     const invMod = await import(pathToFileURL(invPath).href);
-    const invariants = { stateInvariants: invMod.stateInvariants || (invMod.default || {}).stateInvariants || [], transitionInvariants: invMod.transitionInvariants || (invMod.default || {}).transitionInvariants || [] };
+    const invariants = { stateInvariants: invMod.stateInvariants || (invMod.default || {}).stateInvariants || [], transitionInvariants: invMod.transitionInvariants || (invMod.default || {}).transitionInvariants || [], rejectionInvariants: invMod.rejectionInvariants || (invMod.default || {}).rejectionInvariants || [] };
     // A spec the checker could not run (load throw, or missing init()/next())
     // must surface as an ERROR, never as a silent zero-violation result: it
     // would otherwise dilute the strength of a violation every live spec
@@ -365,10 +361,9 @@ export async function verify(opts) {
     const perSpec = specPaths.map((p, i) => {
       const name = p.replace(/^.*[\\/]/, '');
       try {
-        // mode threads through: 'legacy' forces the bare-next engine +
-        // buildDomain(); 'sam' lets check() auto-detect a v2 module and drive
-        // it through the adapter with manifest() domains.
-        const r = check({ specModule: loadSpec(p), contract, invariants, windows, legacyBareNext: mode === 'legacy', initialStates, ...(maxStates ? { maxStates } : {}) });
+        // check() drives the v2 module through the adapter with manifest()
+        // domains; a non-v2 module is refused, never silently explored.
+        const r = check({ specModule: loadSpec(p), contract, invariants, initialStates, ...(maxStates ? { maxStates } : {}) });
         return r.error ? { name, error: r.error } : { name, ...r };
       } catch (e) { return { name, error: String(e && e.message) }; }
     });
@@ -383,6 +378,7 @@ export async function verify(opts) {
     const violations = [...byName.values()].map((e) => ({ ...e, strength: ran.length > 0 && e.specs === ran.length ? 'all-specs' : 'some-specs' }));
     const domainNotes = [...new Set(ran.flatMap((r) => r.domainNotes || []))];
     const driftWarnings = [...new Set(ran.flatMap((r) => r.driftWarnings || []))];
+    const internalKeys = [...new Set(ran.flatMap((r) => r.internalKeys || []))];
     // Frozen-key aggregation mirrors the violation strength rule: the claim
     // "the check is structurally blind behind this key" is strongest when
     // EVERY checked spec froze it; a key only some specs freeze is itself a
@@ -399,6 +395,18 @@ export async function verify(opts) {
       e.specs++; frozenByKey.set(f.key, e);
     }));
     const frozenKeys = [...frozenByKey.values()].map(({ valueSet, ...e }) => ({ ...e, strength: ran.length > 0 && e.specs === ran.length ? 'all-specs' : 'some-specs' }));
+    // Rejection-coverage aggregation (specialRules cross-check, exhaustive
+    // tier): a declared rule missing from EVERY checked spec's explored graph
+    // is the strong claim; missing from only some is a spec disagreement.
+    const missByRule = new Map();
+    ran.forEach((r) => (r.rejectionReport?.missing || []).forEach((name) => {
+      missByRule.set(name, (missByRule.get(name) || 0) + 1);
+    }));
+    const rejectionCoverage = ran.some((r) => r.rejectionReport) ? {
+      declared: ran.find((r) => r.rejectionReport)?.rejectionReport.declared || [],
+      missing: [...missByRule.entries()].map(([name, specs]) => ({ name, specs, strength: ran.length > 0 && specs === ran.length ? 'all-specs' : 'some-specs' })),
+      bounded: ran.some((r) => r.rejectionReport?.bounded),
+    } : null;
     invReport = {
       specs: specPaths.length,
       checkedSpecs: ran.length,
@@ -409,6 +417,8 @@ export async function verify(opts) {
       driftWarnings,
       frozenKeys,
       violations,
+      rejectionCoverage,
+      internalKeys,
     };
   }
 
@@ -419,7 +429,7 @@ export async function verify(opts) {
   // failure is reported loudly.
   let tlaReport = null;
   if (opts.tla) {
-    tlaReport = await tlaEscalation({ specPaths, liveIdx, matrix, mode, outDir, invPath, contractPath: resolve(opts.contract), opts });
+    tlaReport = await tlaEscalation({ specPaths, liveIdx, matrix, outDir, invPath, contractPath: resolve(opts.contract), opts });
   }
 
   writeFileSync(join(outDir, 'findings.json'), JSON.stringify({ summary, findings, perWindow, invReport, tlaReport }, null, 2), 'utf-8');
@@ -434,10 +444,7 @@ export async function verify(opts) {
  * report object ({ skipped } | { spec, transpileError } | { spec,
  * toolchainNote, ... } | the full TLC result).
  */
-async function tlaEscalation({ specPaths, liveIdx, matrix, mode, outDir, invPath, contractPath, opts }) {
-  if (mode === 'legacy') {
-    return { skipped: 'TLC escalation requires the v2 SAM artifact — not available with --legacy-bare-next' };
-  }
+async function tlaEscalation({ specPaths, liveIdx, matrix, outDir, invPath, contractPath, opts }) {
   if (!liveIdx.length) {
     return { skipped: 'no live specs to escalate (every spec failed to load/replay)' };
   }
@@ -624,6 +631,16 @@ function renderInvSection(L, invReport) {
       : 'in every state reachable';
     L.push(`- ⚠️ FROZEN STATE KEY: \`${f.key}\` ${at} ${scope} by ${who}. If it gates behavior, this model check is structurally blind to that behavior — seed \`--initial-states\` (or capture traces) with a non-default value.`);
   }
+  for (const k of invReport.internalKeys || []) {
+    L.push(`- ⚠️ INTERNAL STATE KEY: \`${k}\` is pinned at its init value during exploration — behavior gated on it is structurally out of this check's reach (and invisible to the frozen-key scan). If it gates behavior, promote it to an observable key or accept the blind spot knowingly.`);
+  }
+  const rc = invReport.rejectionCoverage;
+  if (rc && rc.missing.length) {
+    for (const m of rc.missing) {
+      const who = m.strength === 'all-specs' ? `EVERY checked spec (${m.specs}/${invReport.checkedSpecs})` : `${m.specs}/${invReport.checkedSpecs} checked spec(s)`;
+      L.push(`- ⚠️ REJECTION NEVER FIRES: declared special rule \`${m.name}\` never fired as a rejection over the explored graph of ${who}${rc.bounded ? ' (exploration was bounded — raise --max-states before reading this as absence)' : ''}. The rule is unreachable over the declared domain, or the code rejects with a different reason — either way the contract and the machine disagree about this rule.`);
+    }
+  }
   if (!invReport.violations.length) {
     const qualified = (invReport.domainNotes || []).length
       ? `\nNo invariant violations reachable over the EXPLORED alphabet (${invReport.domainNotes.length} action/field(s) skipped — see warnings). (Bounded exploration; not a proof.)`
@@ -720,7 +737,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try { a = parseArgs(process.argv.slice(2)); }
   catch (e) { console.error('[verify] ' + e.message); process.exit(2); }
   if (!a.contract || !a.traces) {
-    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] [--no-auto-regen] | --specs <dir>) [--invariants <inv.mjs>] [--initial-states <states.json>] [--max-states N] [--out <dir>] [--legacy-bare-next] [--tla [--tla-bound N] [--tla-timeout <s>]]');
+    console.error('usage: verify.mjs --contract <c.json> --traces <dir> (--source <f> --model <id> [--n 5] [--max-tokens 32000] [--no-auto-regen] | --specs <dir>) [--invariants <inv.mjs>] [--initial-states <states.json>] [--max-states N] [--out <dir>] [--tla [--tla-bound N] [--tla-timeout <s>]]');
     process.exit(2);
   }
   verify(a).then((r) => {

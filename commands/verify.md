@@ -1,16 +1,15 @@
 ---
 description: Run the Polygraph verification loop — generate N transition-function specs from a source file and replay real traces against them, reporting spec-errors vs code-findings.
-argument-hint: --contract <c.json> --source <file> --traces <dir> --model <id> [--n 5] [--max-tokens 32000] [--invariants <inv.mjs>] [--legacy-bare-next] [--tla]
+argument-hint: --contract <c.json> --source <file> --traces <dir> --model <id> [--n 5] [--max-tokens 32000] [--invariants <inv.mjs>] [--tla]
 allowed-tools: Bash, Read, Write
 ---
 
 Run the Polygraph verification loop over the arguments in `$ARGUMENTS`.
 
 This drives `${CLAUDE_PLUGIN_ROOT}/scripts/verify.mjs`. The generated artifact
-is, by default, a **v2 SAM strict-profile module** (named intents with schemas
-and finite domains, keyed acceptors, observable `reject(reason)`, sealed
-model); `--legacy-bare-next` selects the original bare
-`next(state, action, data)` artifact end-to-end for one release. Two modes:
+is a **v2 SAM strict-profile module** (named intents with schemas and finite
+domains, keyed acceptors, observable `reject(reason)`, sealed model). The 1.x
+bare `next(state, action, data)` artifact was removed in 8.0.0. Two modes:
 
 - **Generate + replay** (needs `ANTHROPIC_API_KEY` and `--model`):
   ```
@@ -26,8 +25,6 @@ model); `--legacy-bare-next` selects the original bare
 
 Useful flags:
 
-- `--legacy-bare-next` — bare-next artifact (legacy prompt, `tv.mjs` replayer,
-  `buildDomain()` checker domains) instead of the v2 default.
 - `--tla` — TLC escalation tier: after the verdict, the winning live spec
   (most windows passed; tie → first) is mechanically transpiled to TLA+
   (`out/tla/*.tla` + `.cfg`) and model-checked with TLC; the outcome (states,

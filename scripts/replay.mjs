@@ -1,13 +1,12 @@
-// Replay helper: run one spec file against a window list via tv.mjs, returning
-// per-window statuses. Shared by verify.mjs and the self-test.
+// Replay helper: run one spec file against a window list via sam-tv.mjs,
+// returning per-window statuses. Shared by verify.mjs and the self-tests.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { readFileSync, readdirSync } from 'node:fs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const TV = join(HERE, 'tv.mjs'); // legacy bare-next() replayer
-const SAM_TV = join(HERE, 'sam-tv.mjs'); // v2 SAM strict-profile replayer (default)
+const SAM_TV = join(HERE, 'sam-tv.mjs'); // v2 SAM strict-profile replayer
 
 /** Load and flatten an NDJSON trace corpus (a dir of *.ndjson or a single file). */
 export function loadWindows(tracePath) {
@@ -37,12 +36,10 @@ export function loadWindows(tracePath) {
 
 /**
  * Replay a single spec file against the windows, returning the replayer's full
- * per-window results. `mode` selects the artifact contract:
- *   'sam'    (default) — v2 SAM strict-profile module via sam-tv.mjs; results
- *            additionally carry { classification, deep, rejectionReason?, error? }.
- *   'legacy' — bare next(state, action, data) module via tv.mjs.
- * Returns { ok, results:[{ status, ... }], error? }; ok:false means the spec
- * did not load / lacks the expected surface (caller scores all windows unscoreable).
+ * per-window results. The spec is a v2 SAM strict-profile module, replayed by
+ * sam-tv.mjs; results carry { status, classification, deep, rejectionReason?,
+ * error? }. Returns { ok, results, error? }; ok:false means the spec did not
+ * load / lacks the expected surface (caller scores all windows unscoreable).
  */
 // A spec that retains a live handle (setInterval, an open socket — LLM output
 // routinely appends demo scaffolding) would keep the child's event loop alive
@@ -50,8 +47,8 @@ export function loadWindows(tracePath) {
 // per call so a caller (or test) can adjust it at runtime.
 const replayTimeoutMs = () => Number(process.env.POLYGRAPH_REPLAY_TIMEOUT_MS || 120000);
 
-export function replaySpecResults(specPath, windows, mode = 'sam') {
-  const runner = mode === 'legacy' ? TV : SAM_TV;
+export function replaySpecResults(specPath, windows) {
+  const runner = SAM_TV;
   const request = {
     specPath: resolve(specPath).replaceAll('\\', '/'),
     windows: windows.map((w) => ({ action: w.action, data: w.data, preState: w.pre, postState: w.post })),
@@ -88,8 +85,8 @@ export function replaySpecResults(specPath, windows, mode = 'sam') {
 }
 
 /** Replay a single spec file. Returns ['pass'|'fail'|'unscoreable', ...] aligned to windows. */
-export function replaySpec(specPath, windows, mode = 'sam') {
-  const resp = replaySpecResults(specPath, windows, mode);
+export function replaySpec(specPath, windows) {
+  const resp = replaySpecResults(specPath, windows);
   if (!resp.ok) return windows.map(() => 'unscoreable');
   return resp.results.map((r) => r.status);
 }

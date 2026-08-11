@@ -8,15 +8,15 @@ import { readFileSync, mkdirSync, writeFileSync, rmSync, cpSync } from 'node:fs'
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCorpus } from '../scripts/validate_corpus.mjs';
+import { buildPrompt } from '../scripts/build_prompt.mjs';
 import { loadWindows, replaySpec } from '../scripts/replay.mjs';
 import { verify } from '../scripts/verify.mjs';
 import { buildRequest, extractSpec, generateSpecs } from '../scripts/generate.mjs';
-import { buildPrompt } from '../scripts/build_prompt.mjs';
 import { resolveModel } from '../scripts/models.mjs';
 import { check, buildDomain } from '../scripts/check.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const EX = join(HERE, '..', 'examples', 'turnstile');
+const EX = join(HERE, '..', 'examples', 'turnstile-v2');
 const contract = JSON.parse(readFileSync(join(EX, 'contract.json'), 'utf-8'));
 const TMP = join(HERE, '.tmp');
 rmSync(TMP, { recursive: true, force: true });
@@ -29,6 +29,44 @@ function ok(name, cond) {
   passed++;
 }
 
+
+// ── v2 fixture factory ──────────────────────────────────────────────────────
+// Spec FILES go through the real replayer (sam-tv.mjs), which only accepts a
+// SAM v2 strict-profile module. These fixtures are written as real ones: a
+// declared modelShape, named intents with domains, and acceptors that honour
+// the frame rule (every declared key written on every accepted path).
+const TYPE_OF = (v) => (typeof v === 'number' ? 'number' : typeof v === 'string' ? 'string' : 'object');
+function v2Source(initial, acceptors) {
+  const shape = Object.entries(initial)
+    .map(([k, v]) => `${k}: { type: '${TYPE_OF(v)}' }`).join(', ');
+  const intents = Object.keys(acceptors)
+    .map((k) => `${k}: { action: (d = {}) => ({ ...d }), schema: {}, domain: [{}] }`).join(', ');
+  const accs = Object.entries(acceptors)
+    .map(([k, body]) => `${k}: (model) => (p, { reject, next, unchanged }) => { ${body} }`).join(',\n      ');
+  return `'use strict';
+const { createInstance } = require('@cognitive-fab/sam-pattern');
+const instance = createInstance({ strict: true, hasAsyncActions: false });
+const INITIAL_STATE = ${JSON.stringify(initial)};
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { ${shape} },
+    actions: { ${intents} },
+    acceptors: {
+      ${accs}
+    },
+    reactors: [],
+  },
+});
+const { intents: __i } = control;
+const getState = () => instance({}).getState();
+const setState = (st) => { instance({}).setState(st); };
+const init = () => { setState(INITIAL_STATE); };
+const actions = Object.fromEntries(Object.keys(__i).map((k) => [k, (d = {}) => __i[k](d)]));
+module.exports = { instance, init, actions, getState, setState };
+`;
+}
+
 console.log('1) corpus validation');
 const rep = validateCorpus(contract, join(EX, 'traces'));
 ok('12 windows total', rep.total === 12);
@@ -38,9 +76,9 @@ ok('no under-covered special rules', rep.underCovered.length === 0);
 
 console.log('2) controls (positive + negative) via the replayer');
 const windows = loadWindows(join(EX, 'traces'));
-const refStatuses = replaySpec(join(EX, 'specs', 'reference.js'), windows, 'legacy');
+const refStatuses = replaySpec(join(EX, 'specs', 'reference.js'), windows);
 ok('reference passes all 12 windows', refStatuses.every((s) => s === 'pass'));
-const mutStatuses = replaySpec(join(EX, 'specs-mutant', 'mutant.js'), windows, 'legacy');
+const mutStatuses = replaySpec(join(EX, 'specs-mutant', 'mutant.js'), windows);
 const failIdx = mutStatuses.map((s, i) => (s === 'fail' ? i : -1)).filter((i) => i >= 0);
 ok('mutant fails exactly 3 windows', failIdx.length === 3);
 ok('mutant failures are all PUSH-while-LOCKED no-ops',
@@ -53,7 +91,7 @@ const mixDir = join(TMP, 'mix');
 mkdirSync(mixDir, { recursive: true });
 cpSync(join(EX, 'specs', 'reference.js'), join(mixDir, 'spec_0.js'));
 cpSync(join(EX, 'specs-mutant', 'mutant.js'), join(mixDir, 'spec_1.js'));
-const mix = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: mixDir, out: join(TMP, 'out-mix') });
+const mix = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: mixDir, out: join(TMP, 'out-mix') });
 ok('mix: 9 consistent windows', mix.summary.consistent === 9);
 ok('mix: 3 spec-error windows', mix.summary.specError === 3);
 ok('mix: 0 code-finding windows', mix.summary.codeFinding === 0);
@@ -62,29 +100,30 @@ ok('mix: 0 code-finding windows', mix.summary.codeFinding === 0);
 const soloDir = join(TMP, 'solo');
 mkdirSync(soloDir, { recursive: true });
 cpSync(join(EX, 'specs-mutant', 'mutant.js'), join(soloDir, 'spec_0.js'));
-const solo = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: soloDir, out: join(TMP, 'out-solo') });
+const solo = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: soloDir, out: join(TMP, 'out-solo') });
 ok('solo: 9 consistent windows', solo.summary.consistent === 9);
 ok('solo: 3 code-finding windows', solo.summary.codeFinding === 3);
 ok('findings.md written', readFileSync(join(TMP, 'out-solo', 'findings.md'), 'utf-8').includes('verification findings'));
 
+
 console.log('4) prompt build (derivation mode — no per-state semantics leaked)');
-// mode 'legacy' is explicit here: the DEFAULT prompt is now the v2 SAM strict
-// profile (covered by test/selftest-prompts.mjs); this suite pins the
-// --legacy-bare-next arm.
-const prompt = buildPrompt(contract, readFileSync(join(EX, 'turnstile.js'), 'utf-8'), { filePath: 'turnstile.js', lang: 'javascript', mode: 'legacy' });
-ok('prompt embeds the source', prompt.includes('class Turnstile'));
-ok('prompt lists the state keys', prompt.includes('`state`') && prompt.includes('`coins`'));
-ok('prompt lists the actions', prompt.includes("'COIN'") && prompt.includes("'PUSH'"));
-ok('prompt states the no-op rule', /ignored action must\s+return the state unchanged/.test(prompt));
-// Derivation mode: the TEMPLATE + contract rendering must not add per-state
-// semantics (the source may legitimately describe its own behavior in comments;
-// that is what the model derives from). Build with a neutral source and confirm
-// no per-action behavior is described by our own scaffolding.
-const neutralPrompt = buildPrompt(contract, '// (source omitted for this check)', { filePath: 'x.js', lang: 'javascript', mode: 'legacy' });
-ok('template instructs derivation from source (not description)',
-  /Model the observable single-step behavior of the real code\s+as implemented in the source above/.test(neutralPrompt));
-ok('template adds no per-(state,action) transition table',
-  !/\b(LOCKED|UNLOCKED)\b\s*->/.test(neutralPrompt));
+// The v2 template is the only one. Derivation doctrine: the TEMPLATE and the
+// contract renderers must never describe per-(state, action) behavior — the
+// source is what the model derives from, so scaffolding that narrated the
+// semantics would let a spec inherit the description instead of the code.
+{
+  const v2Prompt = buildPrompt(contract, "class Turnstile { /* real source */ }", { filePath: 'turnstile.js', lang: 'javascript' });
+  ok('prompt embeds the source', v2Prompt.includes('class Turnstile'));
+  ok('prompt lists the state keys', v2Prompt.includes('`state`') && v2Prompt.includes('`coins`'));
+  ok('prompt lists the intents', /COIN/.test(v2Prompt) && /PUSH/.test(v2Prompt));
+  ok('prompt states the ignored-action rule as an observable rejection',
+    /reject\(/.test(v2Prompt) && /push-while-locked-is-noop/.test(v2Prompt));
+  const neutralPrompt = buildPrompt(contract, '// (source omitted for this check)', { filePath: 'x.js', lang: 'javascript' });
+  ok('template instructs derivation from the source, not from a description',
+    /Model the observable single-step behavior of the real code as implemented in\s+the source above/.test(neutralPrompt));
+  ok('template adds no per-(state, action) transition table',
+    !/\b(LOCKED|UNLOCKED)\b\s*->/.test(neutralPrompt));
+}
 
 console.log('5) generate.mjs request shape + mocked API');
 const reqBody = buildRequest({ prompt: 'X', model: 'fable-5' });
@@ -106,10 +145,10 @@ ok('extractSpec pulls the fenced block', extractSpec('```javascript\nmodule.expo
 
 const mockFetch = async () => ({
   ok: true,
-  json: async () => ({ content: [{ text: '```javascript\nmodule.exports = { init: () => ({}), next: (s) => s };\n```' }], usage: {} }),
+  json: async () => ({ content: [{ text: '```javascript\nmodule.exports = { init: () => ({}), transition: (s) => s };\n```' }], usage: {} }),
 });
 const gens = await generateSpecs({ prompt: 'X', model: 'fable-5', n: 2, apiKey: 'test', fetchImpl: mockFetch });
-ok('mocked generate returns 2 specs', gens.length === 2 && gens.every((g) => g.ok && g.spec.includes('next')));
+ok('mocked generate returns 2 specs', gens.length === 2 && gens.every((g) => g.ok && g.spec.includes('transition')));
 
 // Default budget is generous enough for reasoning models' thinking + answer.
 ok('default max_tokens is high enough for reasoning models', buildRequest({ prompt: 'X', model: 'sonnet-5' }).max_tokens >= 32000);
@@ -166,32 +205,38 @@ ok('SAM: PUSH-while-LOCKED no-op has post == pre',
 // The SAM-captured corpus is validated by the same controls path: the existing
 // hand-written reference next() must score 100% on it.
 ok('SAM: reference spec scores 100% on the SAM-captured corpus',
-  replaySpec(join(EX, 'specs', 'reference.js'), samWindows, 'legacy').every((s) => s === 'pass'));
+  replaySpec(join(EX, 'specs', 'reference.js'), samWindows).every((s) => s === 'pass'));
+
+
+// The checker admits an already-adapted {init, transition} relation only WITH
+// an explicit (action, data) domain — a relation carries no manifest() to read
+// one from. buildDomain() is the contract-side view used for exactly that.
+const stepsOf = (c) => buildDomain(c, []).steps;
 
 console.log('7) model checker (scripts/check.mjs) — iterate next() against invariants');
 // A tiny counter machine with an off-by-one: it should lock at 3 but locks at 4,
 // so it reaches the illegal state {active, n:3}. Model checking must FIND it.
 const buggy = {
   init: () => ({ status: 'active', n: 0 }),
-  next: (s, action) => {
+  transition: (s, action) => {
     if (action === 'TICK' && s.status === 'active') { const n = s.n + 1; return n > 3 ? { status: 'locked', n } : { status: 'active', n }; }
     return { status: s.status, n: s.n };
   },
 };
 const counterContract = { stateKeys: ['status', 'n'], actions: { TICK: { dataFields: {} } } };
 const inv = { stateInvariants: [{ name: 'locked-by-3', pred: (s) => !(s.status === 'active' && s.n >= 3) }] };
-const buggyRes = check({ specModule: buggy, contract: counterContract, invariants: inv });
+const buggyRes = check({ specModule: buggy, contract: counterContract, steps: stepsOf(counterContract), invariants: inv });
 ok('checker FINDS the reachable violation a faithful spec hides', buggyRes.ok === false && buggyRes.violations.length === 1);
 ok('checker returns a shortest counterexample path (init -> 3x TICK)',
   buggyRes.violations[0].path.length === 4 && buggyRes.violations[0].path.slice(1).every((s) => s.action === 'TICK'));
 
 // The corrected machine (locks at 3) satisfies the invariant — no violation.
-const fixed = { init: () => ({ status: 'active', n: 0 }), next: (s, a) => (a === 'TICK' && s.status === 'active') ? (s.n + 1 >= 3 ? { status: 'locked', n: s.n + 1 } : { status: 'active', n: s.n + 1 }) : { status: s.status, n: s.n } };
-ok('checker passes a correct machine (no false alarm)', check({ specModule: fixed, contract: counterContract, invariants: inv }).ok === true);
+const fixed = { init: () => ({ status: 'active', n: 0 }), transition: (s, a) => (a === 'TICK' && s.status === 'active') ? (s.n + 1 >= 3 ? { status: 'locked', n: s.n + 1 } : { status: 'active', n: s.n + 1 }) : { status: s.status, n: s.n } };
+ok('checker passes a correct machine (no false alarm)', check({ specModule: fixed, contract: counterContract, steps: stepsOf(counterContract), invariants: inv }).ok === true);
 
 // A next() that throws is itself a finding.
-const thrower = { init: () => ({ x: 0 }), next: () => { throw new Error('boom'); } };
-const throwRes = check({ specModule: thrower, contract: { stateKeys: ['x'], actions: { GO: { dataFields: {} } } }, invariants: {} });
+const thrower = { init: () => ({ x: 0 }), transition: () => { throw new Error('boom'); } };
+const throwRes = check({ specModule: thrower, contract: { stateKeys: ['x'], actions: { GO: { dataFields: {} } } }, steps: stepsOf({ stateKeys: ['x'], actions: { GO: { dataFields: {} } } }), invariants: {} });
 ok('checker reports a throwing next() as a violation', throwRes.ok === false && /threw/.test(throwRes.violations[0].invariant));
 
 // Domain inference from traces (no contract dataDomain).
@@ -211,13 +256,13 @@ ok('literal {state_keys} in source is not rewritten',
 const emptyDir = join(TMP, 'empty-specs');
 mkdirSync(emptyDir, { recursive: true });
 let threw = false;
-try { await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: emptyDir, out: join(TMP, 'out-empty') }); }
+try { await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: emptyDir, out: join(TMP, 'out-empty') }); }
 catch (e) { threw = /no specs found/.test(e.message); }
 ok('--specs with zero matching files throws (no false clean)', threw);
 const cjsDir = join(TMP, 'cjs-specs');
 mkdirSync(cjsDir, { recursive: true });
 cpSync(join(EX, 'specs', 'reference.js'), join(cjsDir, 'reference.cjs'));
-const cjsRun = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: cjsDir, out: join(TMP, 'out-cjs') });
+const cjsRun = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: cjsDir, out: join(TMP, 'out-cjs') });
 ok('.cjs reference spec is picked up and passes', cjsRun.summary.specs === 1 && cjsRun.summary.consistent === 12);
 
 // (8c) stdout integrity: a spec that console.logs (top-level AND inside next())
@@ -230,7 +275,7 @@ const _refNext = module.exports.next;
 module.exports.next = (s, a, d) => { console.log('runtime noise'); return _refNext(s, a, d); };
 `, 'utf-8');
 ok('spec with console.log replays pass (stdout protocol intact)',
-  replaySpec(noisySpec, windows, 'legacy').every((s) => s === 'pass'));
+  replaySpec(noisySpec, windows).every((s) => s === 'pass'));
 
 // (8d) dead-spec partition: one dead spec among live ones no longer floods
 // every window as spec-error; all-dead yields unscoreable-all, not consistent.
@@ -238,13 +283,13 @@ const deadMixDir = join(TMP, 'dead-mix');
 mkdirSync(deadMixDir, { recursive: true });
 cpSync(join(EX, 'specs', 'reference.js'), join(deadMixDir, 'spec_0.js'));
 writeFileSync(join(deadMixDir, 'spec_1.js'), 'syntax error(', 'utf-8');
-const deadMix = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-deadmix') });
+const deadMix = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-deadmix') });
 ok('dead spec excluded: windows classify from live specs only', deadMix.summary.consistent === 12 && deadMix.summary.specError === 0);
 ok('dead spec is named in the summary', deadMix.summary.deadSpecs.length === 1 && deadMix.summary.deadSpecs[0] === 'spec_1.js');
 const allDeadDir = join(TMP, 'all-dead');
 mkdirSync(allDeadDir, { recursive: true });
 writeFileSync(join(allDeadDir, 'spec_0.js'), 'syntax error(', 'utf-8');
-const allDead = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-alldead') });
+const allDead = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-alldead') });
 ok('all specs dead -> unscoreable-all, never consistent', allDead.summary.unscoreableAll === 12 && allDead.summary.consistent === 0);
 
 // (8e) invariant phase: a dead spec surfaces as an error and does NOT dilute
@@ -252,31 +297,33 @@ ok('all specs dead -> unscoreable-all, never consistent', allDead.summary.unscor
 const invFile = join(TMP, 'inv.mjs');
 writeFileSync(invFile, `export const stateInvariants = [{ name: 'never-unlocked', pred: (s) => s.state !== 'UNLOCKED' }];\nexport const transitionInvariants = [];\n`, 'utf-8');
 // (turnstile coins are unbounded, so bound exploration: capHit must PROPAGATE.)
-const invMix = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-invmix'), invariants: invFile, 'max-states': 50 });
+const invMix = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: deadMixDir, out: join(TMP, 'out-invmix'), invariants: invFile, 'max-states': 50 });
 ok('invariant strength counts only specs the checker ran (all-specs, not diluted)',
   invMix.invReport.violations.length === 1 && invMix.invReport.violations[0].strength === 'all-specs');
 ok('checker-failure on a spec is surfaced as an error', invMix.invReport.errors.length === 1 && /spec_1\.js/.test(invMix.invReport.errors[0]));
 ok('capHit propagates into invReport (bounded exploration is visible)', invMix.invReport.capHit === true);
 ok('CAP HIT is rendered in findings.md',
   readFileSync(join(TMP, 'out-invmix', 'findings.md'), 'utf-8').includes('CAP HIT'));
-const invDead = await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-invdead'), invariants: invFile, 'max-states': 50 });
+const invDead = await verify({ contract: join(EX, 'contract.json'), traces: join(EX, 'traces'), specs: allDeadDir, out: join(TMP, 'out-invdead'), invariants: invFile, 'max-states': 50 });
 ok('all specs dead -> model check reports DID NOT RUN',
   invDead.invReport.checkedSpecs === 0 && readFileSync(join(TMP, 'out-invdead', 'findings.md'), 'utf-8').includes('DID NOT RUN'));
 
 // (8f) capHit is reported by check() when exploration is bounded.
-const counter = { init: () => ({ n: 0 }), next: (s, a) => (a === 'TICK' ? { n: s.n + 1 } : s) };
-const capRes = check({ specModule: counter, contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }, invariants: {}, maxStates: 3 });
+const counter = { init: () => ({ n: 0 }), transition: (s, a) => (a === 'TICK' ? { n: s.n + 1 } : s) };
+const capRes = check({ specModule: counter, contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }, steps: stepsOf({ stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }), invariants: {}, maxStates: 3 });
 ok('check() reports capHit on bounded exploration', capRes.capHit === true);
 
 // (8g) buildDomain accepts the `data:` alias exactly like build_prompt.
 const aliasDom = buildDomain({ actions: { CHARGE: { data: { result: 'string' } } }, dataDomain: { CHARGE: { result: ['ok', 'err'] } } }, []);
 ok('buildDomain reads data: alias (same accessor as the prompt)', aliasDom.steps.length === 2);
-// ...and a skipped action is VISIBLE in the render, qualifying the clean line.
-const skipped = check({ specModule: counter, contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} }, MYSTERY: { dataFields: { x: 'string' } } } }, invariants: {}, maxStates: 5 });
+// A contract action with no enumerable domain is VISIBLE in buildDomain's
+// notes — the contract-side half of the warning. (The checker-side half, an
+// action the module's manifest() does not declare, is pinned in
+// selftest-v2.mjs: "contract action missing from manifest() ... NOT explored".)
+const gapDom = buildDomain({ actions: { TICK: { dataFields: {} }, MYSTERY: { dataFields: { x: 'string' } } } }, []);
+ok('an unenumerable contract action is reported as a domain note, never silently dropped',
+  gapDom.notes.some((n) => /no domain for MYSTERY\.x/.test(n)) && gapDom.steps.length === 1);
 const { render: renderCheck } = await import('../scripts/check.mjs');
-const skippedText = renderCheck(skipped);
-ok('skipped action surfaces as a WARNING in check render', /WARNING: no domain for MYSTERY\.x/.test(skippedText));
-ok('clean line is qualified when the alphabet was pruned', /EXPLORED alphabet/.test(skippedText));
 
 // (8h) canonical deep-equality: nested-object state in a different key order
 // is EQUAL (replay) — replay and checker share one state-equality definition.
@@ -285,9 +332,9 @@ mkdirSync(nestedTrace, { recursive: true });
 writeFileSync(join(nestedTrace, 's1.ndjson'),
   JSON.stringify({ pre: { s: { a: 1, b: 2 } }, action: 'X', data: {}, post: { s: { a: 1, b: 2 } } }) + '\n', 'utf-8');
 const nestedSpec = join(TMP, 'nested-spec.js');
-writeFileSync(nestedSpec, `module.exports = { init: () => ({ s: { a: 1, b: 2 } }), next: (st) => ({ s: { b: st.s.b, a: st.s.a } }) };`, 'utf-8');
+writeFileSync(nestedSpec, v2Source({ s: { a: 1, b: 2 } }, { X: 'next.s = { b: model.s.b, a: model.s.a };' }), 'utf-8');
 ok('nested-object state with reordered keys replays pass (canonical equality)',
-  replaySpec(nestedSpec, loadWindows(nestedTrace), 'legacy').every((s) => s === 'pass'));
+  replaySpec(nestedSpec, loadWindows(nestedTrace)).every((s) => s === 'pass'));
 
 // (8i) guarded shared API call: HTTP errors and empty responses are failures,
 // never parseable-as-clean text (the eval scores them unscoreable).
@@ -345,7 +392,7 @@ ok('classify fail+unscoreable mix does NOT claim "all specs disagree" (weaker sp
 const emptyTraces = join(TMP, 'empty-traces');
 mkdirSync(emptyTraces, { recursive: true });
 let noWindowsThrew = false;
-try { await verify({ legacyBareNext: true, contract: join(EX, 'contract.json'), traces: emptyTraces, specs: mixDir, out: join(TMP, 'out-nowin') }); }
+try { await verify({ contract: join(EX, 'contract.json'), traces: emptyTraces, specs: mixDir, out: join(TMP, 'out-nowin') }); }
 catch (e) { noWindowsThrew = /no trace windows/.test(e.message); }
 ok('verify with zero trace windows throws (no false clean)', noWindowsThrew);
 const emptyRep = validateCorpus(contract, emptyTraces);
@@ -373,7 +420,7 @@ ok('validateCorpus flags an all-blank corpus (zero windows)', blankRep.problems.
   // ...and the replayer refuses to score an empty-post window as a pass.
   const emptyPostWindows = [{ scenario: 'x', index: 0, action: 'COIN', data: {}, pre: { state: 'LOCKED', coins: 0 }, post: {} }];
   ok('replayer scores an empty-post window unscoreable, never pass',
-    replaySpec(join(EX, 'specs', 'reference.js'), emptyPostWindows, 'legacy').every((s) => s === 'unscoreable'));
+    replaySpec(join(EX, 'specs', 'reference.js'), emptyPostWindows).every((s) => s === 'unscoreable'));
   // Key-order-scrambled chaining is NOT a chain break (canonical equality).
   const orderDir = join(TMP, 'order-traces');
   mkdirSync(orderDir, { recursive: true });
@@ -389,10 +436,10 @@ ok('validateCorpus flags an all-blank corpus (zero windows)', blankRep.problems.
 // pipeline. (Short override; restored right after.)
 {
   const hangSpec = join(TMP, 'hang.js');
-  writeFileSync(hangSpec, `module.exports = { init: () => ({}), next: () => { for (;;) {} } };`, 'utf-8');
+  writeFileSync(hangSpec, v2Source({ state: 'LOCKED', coins: 0 }, { COIN: 'for (;;) {}' }), 'utf-8');
   process.env.POLYGRAPH_REPLAY_TIMEOUT_MS = '1500';
   const started = Date.now();
-  const hung = replaySpec(hangSpec, windows.slice(0, 1), 'legacy');
+  const hung = replaySpec(hangSpec, windows.slice(0, 1));
   delete process.env.POLYGRAPH_REPLAY_TIMEOUT_MS;
   ok('blocking spec times out to unscoreable (pipeline does not hang)',
     hung.every((s) => s === 'unscoreable') && Date.now() - started < 30000);
@@ -423,12 +470,12 @@ console.log('9) frozen-field warning — the checker announces its structural bl
 {
   const gated = {
     init: () => ({ mode: 'a', cfg: 3, n: 0 }),
-    next: (s, a) => (a === 'TICK' && s.n < s.cfg
+    transition: (s, a) => (a === 'TICK' && s.n < s.cfg
       ? { mode: s.mode === 'a' ? 'b' : 'a', cfg: s.cfg, n: s.n + 1 }
       : { mode: s.mode, cfg: s.cfg, n: s.n }),
   };
   const gatedContract = { stateKeys: ['mode', 'cfg', 'n'], actions: { TICK: { dataFields: {} } } };
-  const frozenRes = check({ specModule: gated, contract: gatedContract, invariants: {} });
+  const frozenRes = check({ specModule: gated, contract: gatedContract, steps: stepsOf(gatedContract), invariants: {} });
   ok('frozen key detected (cfg never changes across the reachable graph)',
     (frozenRes.frozenKeys || []).some((f) => f.key === 'cfg' && f.value === 3));
   ok('varying keys are NOT reported frozen',
@@ -436,10 +483,10 @@ console.log('9) frozen-field warning — the checker announces its structural bl
   ok('frozen key surfaces as a WARNING in check render',
     /WARNING: state key 'cfg' is frozen at 3/.test(renderCheck(frozenRes)));
   ok('machine where every key varies reports no frozen keys (no new noise)',
-    check({ specModule: fixed, contract: counterContract, invariants: inv }).frozenKeys.length === 0);
+    check({ specModule: fixed, contract: counterContract, steps: stepsOf(counterContract), invariants: inv }).frozenKeys.length === 0);
   // The documented remedy clears the warning by construction: a seeded state
   // with a non-default value joins the reachable graph, so the key varies.
-  const seededRes = check({ specModule: gated, contract: gatedContract, invariants: {}, initialStates: [{ mode: 'a', cfg: 5, n: 0 }] });
+  const seededRes = check({ specModule: gated, contract: gatedContract, steps: stepsOf(gatedContract), invariants: {}, initialStates: [{ mode: 'a', cfg: 5, n: 0 }] });
   ok('an --initial-states seed with a non-default value un-freezes the key',
     !(seededRes.frozenKeys || []).some((f) => f.key === 'cfg'));
 
@@ -448,13 +495,13 @@ console.log('9) frozen-field warning — the checker announces its structural bl
   mkdirSync(join(fzDir, 'specs'), { recursive: true });
   mkdirSync(join(fzDir, 'traces'), { recursive: true });
   writeFileSync(join(fzDir, 'specs', 'spec_0.js'),
-    `module.exports = { init: () => ({ mode: 'a', cfg: 3 }), next: (s, a) => (a === 'FLIP' ? { mode: s.mode === 'a' ? 'b' : 'a', cfg: s.cfg } : { mode: s.mode, cfg: s.cfg }) };`, 'utf-8');
+    v2Source({ mode: 'a', cfg: 3 }, { FLIP: "next.mode = model.mode === 'a' ? 'b' : 'a'; unchanged('cfg');" }), 'utf-8');
   writeFileSync(join(fzDir, 'contract.json'),
     JSON.stringify({ stateKeys: ['mode', 'cfg'], actions: { FLIP: { dataFields: {} } } }), 'utf-8');
   writeFileSync(join(fzDir, 'traces', 's1.ndjson'),
     JSON.stringify({ pre: { mode: 'a', cfg: 3 }, action: 'FLIP', data: {}, post: { mode: 'b', cfg: 3 } }) + '\n', 'utf-8');
   writeFileSync(join(fzDir, 'inv.mjs'), `export const stateInvariants = [{ name: 'mode-declared', pred: (s) => s.mode === 'a' || s.mode === 'b' }];\n`, 'utf-8');
-  const fzRun = await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), out: join(fzDir, 'out') });
+  const fzRun = await verify({ contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), out: join(fzDir, 'out') });
   ok('invReport aggregates the frozen key at all-specs strength',
     fzRun.invReport.frozenKeys.length === 1 && fzRun.invReport.frozenKeys[0].key === 'cfg'
     && fzRun.invReport.frozenKeys[0].values.length === 1 && fzRun.invReport.frozenKeys[0].values[0] === 3
@@ -466,11 +513,11 @@ console.log('9) frozen-field warning — the checker announces its structural bl
   // The remedy findings.md prescribes must work in the SAME tool: --initial-states
   // threads into every per-spec check, and an unfreezing seed clears the warning.
   writeFileSync(join(fzDir, 'seeds.json'), JSON.stringify([{ mode: 'a', cfg: 5 }]), 'utf-8');
-  const fzSeeded = await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), 'initial-states': join(fzDir, 'seeds.json'), out: join(fzDir, 'out-seeded') });
+  const fzSeeded = await verify({ contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), 'initial-states': join(fzDir, 'seeds.json'), out: join(fzDir, 'out-seeded') });
   ok('verify --initial-states un-freezes the key (warning clears end-to-end)',
     fzSeeded.invReport.frozenKeys.length === 0);
   let seedThrew = false;
-  try { await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), 'initial-states': join(fzDir, 'seeds.json'), out: join(fzDir, 'out-noinv') }); }
+  try { await verify({ contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), 'initial-states': join(fzDir, 'seeds.json'), out: join(fzDir, 'out-noinv') }); }
   catch (e) { seedThrew = /only affects the invariant model check/.test(e.message); }
   ok('--initial-states without an invariants module is a loud error, never silently ignored', seedThrew);
 
@@ -478,8 +525,8 @@ console.log('9) frozen-field warning — the checker announces its structural bl
   // machine's configuration — the aggregate must not assert the first spec's
   // value for all of them.
   writeFileSync(join(fzDir, 'specs', 'spec_1.js'),
-    `module.exports = { init: () => ({ mode: 'a', cfg: 7 }), next: (s, a) => (a === 'FLIP' ? { mode: s.mode === 'a' ? 'b' : 'a', cfg: s.cfg } : { mode: s.mode, cfg: s.cfg }) };`, 'utf-8');
-  const fzSplit = await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), out: join(fzDir, 'out-split') });
+    v2Source({ mode: 'a', cfg: 7 }, { FLIP: "next.mode = model.mode === 'a' ? 'b' : 'a'; unchanged('cfg');" }), 'utf-8');
+  const fzSplit = await verify({ contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), out: join(fzDir, 'out-split') });
   const splitEntry = fzSplit.invReport.frozenKeys.find((f) => f.key === 'cfg');
   ok('differing frozen values are BOTH reported (no first-spec-wins)',
     splitEntry && splitEntry.values.length === 2 && splitEntry.values.includes(3) && splitEntry.values.includes(7));
@@ -488,8 +535,8 @@ console.log('9) frozen-field warning — the checker announces its structural bl
 
   // A spec that varies the key makes it a some-specs claim, not all-specs.
   writeFileSync(join(fzDir, 'specs', 'spec_1.js'),
-    `module.exports = { init: () => ({ mode: 'a', cfg: 3 }), next: (s, a) => (a === 'FLIP' ? { mode: s.mode === 'a' ? 'b' : 'a', cfg: s.cfg + 1 } : { mode: s.mode, cfg: s.cfg }) };`, 'utf-8');
-  const fzSome = await verify({ legacyBareNext: true, contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), 'max-states': 10, out: join(fzDir, 'out-some') });
+    v2Source({ mode: 'a', cfg: 3 }, { FLIP: "next.mode = model.mode === 'a' ? 'b' : 'a'; next.cfg = model.cfg + 1;" }), 'utf-8');
+  const fzSome = await verify({ contract: join(fzDir, 'contract.json'), traces: join(fzDir, 'traces'), specs: join(fzDir, 'specs'), invariants: join(fzDir, 'inv.mjs'), 'max-states': 10, out: join(fzDir, 'out-some') });
   const someEntry = fzSome.invReport.frozenKeys.find((f) => f.key === 'cfg');
   ok('a key only some specs freeze reports some-specs strength',
     someEntry && someEntry.strength === 'some-specs' && someEntry.specs === 1);
@@ -501,8 +548,8 @@ console.log('9) frozen-field warning — the checker announces its structural bl
   // A next() that returns undefined (routine in LLM-generated legacy specs for
   // an unhandled action) must not crash the frozen scan — the spec's REAL
   // violations still report; the scan just declines the degenerate graph.
-  const undefSpec = { init: () => ({ x: 0 }), next: (s, a) => (a === 'TICK' && s && s.x === 0 ? { x: 1 } : undefined) };
-  const undefRes = check({ specModule: undefSpec, contract: { stateKeys: ['x'], actions: { TICK: { dataFields: {} } } }, invariants: { stateInvariants: [{ name: 'x-defined', pred: (s) => s && typeof s.x === 'number' }] } });
+  const undefSpec = { init: () => ({ x: 0 }), transition: (s, a) => (a === 'TICK' && s && s.x === 0 ? { x: 1 } : undefined) };
+  const undefRes = check({ specModule: undefSpec, contract: { stateKeys: ['x'], actions: { TICK: { dataFields: {} } } }, steps: stepsOf({ stateKeys: ['x'], actions: { TICK: { dataFields: {} } } }), invariants: { stateInvariants: [{ name: 'x-defined', pred: (s) => s && typeof s.x === 'number' }] } });
   ok('non-object states in the graph do not crash the frozen scan; violations still report',
     undefRes.ok === false && undefRes.violations.length > 0 && Array.isArray(undefRes.frozenKeys) && undefRes.frozenKeys.length === 0);
 }
@@ -512,31 +559,31 @@ console.log('10) runaway-exploration guardrails — drift detection + heartbeat'
 // turns the default cap into a silent multi-minute grind; the guardrail warns
 // EARLY instead of guessing a universal bound.
 {
-  const runaway = { init: () => ({ phase: 'up', term: 0 }), next: (s, a) => (a === 'TICK' ? { phase: 'up', term: s.term + 1 } : { phase: s.phase, term: s.term }) };
+  const runaway = { init: () => ({ phase: 'up', term: 0 }), transition: (s, a) => (a === 'TICK' ? { phase: 'up', term: s.term + 1 } : { phase: s.phase, term: s.term }) };
   const runContract = { stateKeys: ['phase', 'term'], actions: { TICK: { dataFields: {} } } };
-  const drifted = check({ specModule: runaway, contract: runContract, invariants: {}, maxStates: 600, driftThreshold: 256 });
+  const drifted = check({ specModule: runaway, contract: runContract, steps: stepsOf(runContract), invariants: {}, maxStates: 600, driftThreshold: 256 });
   ok('unbounded key detected before the cap grinds',
     (drifted.driftWarnings || []).some((w) => /state key 'term' has \d+ distinct values/.test(w) && /likely unbounded/.test(w)));
   ok('the bounded key is not flagged as drifting', !drifted.driftWarnings.some((w) => /'phase'/.test(w)));
   ok('drift warning surfaces in check render', /WARNING: state key 'term'/.test(renderCheck(drifted)));
   ok('drift tracking stays deterministic (double-pass digest unaffected)', drifted.nondeterministic === false);
   ok('bounded machine emits no drift warnings (no new noise)',
-    check({ specModule: fixed, contract: counterContract, invariants: inv }).driftWarnings.length === 0);
+    check({ specModule: fixed, contract: counterContract, steps: stepsOf(counterContract), invariants: inv }).driftWarnings.length === 0);
 
   // A COMPLETED exploration retracts any mid-run drift suspicion: an exhausted
   // frontier is definitive disproof of "still growing", so a large bounded
   // machine must never be called likely-unbounded in the result.
-  const boundedBig = { init: () => ({ n: 0 }), next: (s, a) => (a === 'TICK' && s.n < 700 ? { n: s.n + 1 } : { n: s.n }) };
-  const bigRes = check({ specModule: boundedBig, contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }, invariants: {}, maxStates: 5000, driftThreshold: 256 });
+  const boundedBig = { init: () => ({ n: 0 }), transition: (s, a) => (a === 'TICK' && s.n < 700 ? { n: s.n + 1 } : { n: s.n }) };
+  const bigRes = check({ specModule: boundedBig, contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }, steps: stepsOf({ stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }), invariants: {}, maxStates: 5000, driftThreshold: 256 });
   ok('bounded-but-large machine: completed exploration reports NO drift (mid-run suspicion retracted)',
     bigRes.capHit === false && bigRes.driftWarnings.length === 0);
 
   // Fleet-style seeds carrying a per-instance distinct key (polyvers seeds
   // every snapshot) must not inflate the detector: drift is about what
   // exploration MINTS, not what it was handed.
-  const idle = { init: () => ({ phase: 'up', id: 0 }), next: (s) => ({ phase: s.phase, id: s.id }) };
+  const idle = { init: () => ({ phase: 'up', id: 0 }), transition: (s) => ({ phase: s.phase, id: s.id }) };
   const fleetSeeds = Array.from({ length: 1200 }, (_, i) => ({ phase: 'up', id: i }));
-  const seededDrift = check({ specModule: idle, contract: { stateKeys: ['phase', 'id'], actions: { TICK: { dataFields: {} } } }, invariants: {}, initialStates: fleetSeeds, driftThreshold: 256 });
+  const seededDrift = check({ specModule: idle, contract: { stateKeys: ['phase', 'id'], actions: { TICK: { dataFields: {} } } }, steps: stepsOf({ stateKeys: ['phase', 'id'], actions: { TICK: { dataFields: {} } } }), invariants: {}, initialStates: fleetSeeds, driftThreshold: 256 });
   ok('seeded fleet snapshots do not trigger a false unbounded verdict',
     seededDrift.driftWarnings.length === 0);
 
@@ -547,7 +594,7 @@ console.log('10) runaway-exploration guardrails — drift detection + heartbeat'
   const origWrite = process.stderr.write;
   process.stderr.write = (chunk) => { beats.push(String(chunk)); return true; };
   try {
-    check({ specModule: runaway, contract: runContract, invariants: {}, maxStates: 600, driftThreshold: 100000 });
+    check({ specModule: runaway, contract: runContract, steps: stepsOf(runContract), invariants: {}, maxStates: 600, driftThreshold: 100000 });
   } finally { process.stderr.write = origWrite; delete process.env.POLYGRAPH_HEARTBEAT_MS; }
   ok('heartbeat line reports states/frontier/elapsed on a long exploration',
     beats.some((b) => /\[check\] exploring \(pass 1\)… \d+ states discovered, frontier \d+/.test(b)));
@@ -557,13 +604,13 @@ console.log('10) runaway-exploration guardrails — drift detection + heartbeat'
   mkdirSync(join(rwDir, 'specs'), { recursive: true });
   mkdirSync(join(rwDir, 'traces'), { recursive: true });
   writeFileSync(join(rwDir, 'specs', 'spec_0.js'),
-    `module.exports = { init: () => ({ phase: 'up', term: 0 }), next: (s, a) => (a === 'TICK' ? { phase: 'up', term: s.term + 1 } : { phase: s.phase, term: s.term }) };`, 'utf-8');
+    v2Source({ phase: 'up', term: 0 }, { TICK: "next.phase = 'up'; next.term = model.term + 1;" }), 'utf-8');
   writeFileSync(join(rwDir, 'contract.json'),
     JSON.stringify({ stateKeys: ['phase', 'term'], actions: { TICK: { dataFields: {} } } }), 'utf-8');
   writeFileSync(join(rwDir, 'traces', 's1.ndjson'),
     JSON.stringify({ pre: { phase: 'up', term: 0 }, action: 'TICK', data: {}, post: { phase: 'up', term: 1 } }) + '\n', 'utf-8');
   writeFileSync(join(rwDir, 'inv.mjs'), `export const stateInvariants = [{ name: 'term-non-negative', pred: (s) => s.term >= 0 }];\n`, 'utf-8');
-  const rwRun = await verify({ legacyBareNext: true, contract: join(rwDir, 'contract.json'), traces: join(rwDir, 'traces'), specs: join(rwDir, 'specs'), invariants: join(rwDir, 'inv.mjs'), 'max-states': '1500', out: join(rwDir, 'out') });
+  const rwRun = await verify({ contract: join(rwDir, 'contract.json'), traces: join(rwDir, 'traces'), specs: join(rwDir, 'specs'), invariants: join(rwDir, 'inv.mjs'), 'max-states': '1500', out: join(rwDir, 'out') });
   ok('invReport carries the drift warning at the default threshold',
     rwRun.invReport.driftWarnings.length === 1 && /state key 'term'/.test(rwRun.invReport.driftWarnings[0]));
   ok('drift warning is rendered in findings.md',
@@ -577,11 +624,12 @@ console.log('11) spec-vs-spec agreement — the vote structure is a first-class 
   const agDir = join(TMP, 'agreement');
   mkdirSync(join(agDir, 'specs'), { recursive: true });
   mkdirSync(join(agDir, 'traces'), { recursive: true });
-  const goodSpec = `module.exports = { init: () => ({ mode: 'a' }), next: (s, a) => (a === 'FLIP' ? { mode: s.mode === 'a' ? 'b' : 'a' } : { mode: s.mode }) };`;
+  const goodSpec = v2Source({ mode: 'a' }, { FLIP: "next.mode = model.mode === 'a' ? 'b' : 'a';" });
+  const noopSpec = v2Source({ mode: 'a' }, { FLIP: "return reject('flip-declined');" });
   writeFileSync(join(agDir, 'specs', 'spec_0.js'), goodSpec, 'utf-8');
   writeFileSync(join(agDir, 'specs', 'spec_1.js'), goodSpec, 'utf-8');
   writeFileSync(join(agDir, 'specs', 'spec_2.js'),
-    `module.exports = { init: () => ({ mode: 'a' }), next: (s) => ({ mode: s.mode }) };`, 'utf-8'); // FLIP is a no-op: fails every window
+    noopSpec, 'utf-8'); // FLIP is a no-op: fails every window
   writeFileSync(join(agDir, 'contract.json'),
     JSON.stringify({ stateKeys: ['mode'], actions: { FLIP: { dataFields: {} } } }), 'utf-8');
   writeFileSync(join(agDir, 'traces', 's1.ndjson'), [
@@ -589,7 +637,7 @@ console.log('11) spec-vs-spec agreement — the vote structure is a first-class 
     JSON.stringify({ pre: { mode: 'b' }, action: 'FLIP', data: {}, post: { mode: 'a' } }),
     JSON.stringify({ pre: { mode: 'a' }, action: 'FLIP', data: {}, post: { mode: 'b' } }),
   ].join('\n') + '\n', 'utf-8');
-  const agRun = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out') });
+  const agRun = await verify({ contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out') });
   // pairs: (0,1) agree 3/3, (0,2) 0/3, (1,2) 0/3 -> 3/9 = 33%
   ok('pairwise agreement computed over live specs', agRun.summary.agreement.pairwisePct === 33);
   ok('the outlier is named with its deviation count',
@@ -603,7 +651,7 @@ console.log('11) spec-vs-spec agreement — the vote structure is a first-class 
 
   // All-agree: a quiet consensus line, no outlier noise.
   rmSync(join(agDir, 'specs', 'spec_2.js'));
-  const agClean = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-clean') });
+  const agClean = await verify({ contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-clean') });
   ok('all-agree run: pairwise 100%, no outliers', agClean.summary.agreement.pairwisePct === 100 && agClean.summary.agreement.outliers.length === 0);
   ok('all-agree consensus line is quiet',
     /all 2 live specs agree on every measured window/.test(readFileSync(join(agDir, 'out-clean', 'findings.md'), 'utf-8')));
@@ -612,8 +660,8 @@ console.log('11) spec-vs-spec agreement — the vote structure is a first-class 
   // outlier — but 0% agreement must NEVER render as consensus (the quiet line
   // is gated on full agreement, not on "no outlier").
   writeFileSync(join(agDir, 'specs', 'spec_1.js'),
-    `module.exports = { init: () => ({ mode: 'a' }), next: (s) => ({ mode: s.mode }) };`, 'utf-8');
-  const agEven = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-even') });
+    noopSpec, 'utf-8');
+  const agEven = await verify({ contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-even') });
   ok('even split: 0% pairwise, no-majority windows counted, no fake outlier',
     agEven.summary.agreement.pairwisePct === 0 && agEven.summary.agreement.noMajority === 3 && agEven.summary.agreement.outliers.length === 0);
   const evenMd = readFileSync(join(agDir, 'out-even', 'findings.md'), 'utf-8');
@@ -625,7 +673,7 @@ console.log('11) spec-vs-spec agreement — the vote structure is a first-class 
   writeFileSync(join(agDir, 'specs', 'spec_1.js'), goodSpec, 'utf-8');
   writeFileSync(join(agDir, 'traces', 's2.ndjson'),
     JSON.stringify({ pre: { mode: 'a' }, action: 'FLIP', data: {}, post: {} }) + '\n', 'utf-8'); // empty post: unscoreable everywhere
-  const agUnsc = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-unsc') });
+  const agUnsc = await verify({ contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-unsc') });
   ok('unscoreable-everywhere window excluded from the agreement measure',
     agUnsc.summary.agreement.measuredWindows === 3 && agUnsc.summary.agreement.pairwisePct === 100
     && /unscoreable-everywhere window\(s\) excluded/.test(readFileSync(join(agDir, 'out-unsc', 'findings.md'), 'utf-8')));
@@ -633,7 +681,7 @@ console.log('11) spec-vs-spec agreement — the vote structure is a first-class 
 
   // A single live spec has no cross-spec signal — no agreement block, no crash.
   rmSync(join(agDir, 'specs', 'spec_1.js'));
-  const agOne = await verify({ legacyBareNext: true, contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-one') });
+  const agOne = await verify({ contract: join(agDir, 'contract.json'), traces: join(agDir, 'traces'), specs: join(agDir, 'specs'), out: join(agDir, 'out-one') });
   ok('single live spec: agreement is null (no fake 100%)', agOne.summary.agreement === null);
 }
 
@@ -644,13 +692,13 @@ console.log('12) scripted negative control (scripts/mutate.mjs) — the control 
   const refSpec = loadSpecFile(join(EX, 'specs', 'reference.js'));
   const tsContract = JSON.parse(readFileSync(join(EX, 'contract.json'), 'utf-8'));
   const tsWindows = loadWindows(join(EX, 'traces'));
-  const { mutants } = enumerateMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows, legacyBareNext: true });
+  const { mutants } = enumerateMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows });
   ok('polynv operators enumerated with stable ids (guard-drop, retarget, widen, freeze)',
     ['drop:COIN@"LOCKED"', 'drop:PUSH@"UNLOCKED"', 'retarget:COIN@"UNLOCKED"->"LOCKED"', 'freeze:coins'].every((id) => mutants.some((m) => m.id === id)));
 
   // A targeted mutation reproduces the hand-made negative control: known
   // flipped windows, everything else untouched.
-  const one = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows, legacyBareNext: true, id: 'drop:COIN@"LOCKED"' });
+  const one = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows, id: 'drop:COIN@"LOCKED"' });
   ok('applied mutation reports the exact flipped windows',
     one.reports.length === 1 && one.reports[0].status === 'discriminated'
     && one.reports[0].originalPassed === 12 && one.reports[0].mutantPassed === 8 && one.reports[0].flipped.length === 4);
@@ -662,7 +710,7 @@ console.log('12) scripted negative control (scripts/mutate.mjs) — the control 
   // trace). Turnstile coins are unbounded, so the graphs are CAP-TRUNCATED —
   // the claim must therefore be the bounded one, not full equivalence
   // (digest equality over truncated prefixes proves nothing beyond the bound).
-  const all = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows, legacyBareNext: true });
+  const all = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows });
   const widen = all.reports.find((r) => r.id.startsWith('widen:PUSH'));
   ok('indistinguishable mutant over a truncated graph claims BOUNDED equivalence only',
     widen && widen.status === 'equivalent-bounded' && /NOT proof of equivalence/.test(renderReports(all)));
@@ -672,21 +720,22 @@ console.log('12) scripted negative control (scripts/mutate.mjs) — the control 
   // Scoring parity with the pipeline replayers: PROJECTION — a trace post
   // carrying only a subset of keys still passes a spec that returns more.
   const projWindows = [{ scenario: 'p', index: 0, action: 'COIN', data: {}, pre: { state: 'LOCKED', coins: 0 }, post: { state: 'UNLOCKED' } }];
-  const proj = applyMutations({ specModule: refSpec, contract: tsContract, windows: projWindows, legacyBareNext: true, id: 'drop:COIN@"LOCKED"' });
+  const proj = applyMutations({ specModule: refSpec, contract: tsContract, windows: projWindows, id: 'drop:COIN@"LOCKED"' });
   ok('projection rule: subset-key post scores pass on the original (parity with tv.mjs)',
     proj.reports[0].originalPassed === 1 && proj.reports[0].flipped.length === 1);
 
   // Step-3 doctrine enforced: an imperfect reference refuses the control
   // instead of laundering the mismatch into "blind spot" verdicts.
-  const brokenRef = { init: refSpec.init, next: (s) => ({ state: s.state, coins: s.coins }) };
+  // The mutant is a REAL v2 module that scores 9/12 — an imperfect reference.
+  const brokenRef = loadSpecFile(join(EX, 'specs-mutant', 'mutant.js'));
   let refused = false;
-  try { applyMutations({ specModule: brokenRef, contract: tsContract, windows: tsWindows, legacyBareNext: true }); }
+  try { applyMutations({ specModule: brokenRef, contract: tsContract, windows: tsWindows }); }
   catch (e) { refused = /positive control must be 100%/.test(e.message); }
   ok('imperfect reference refuses the negative control loudly', refused);
 
   // A thin corpus that never exercises a rule is a BLIND SPOT — the trace-side
   // twin of the M1 frozen-key warning, and the tool's headline result.
-  const thin = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows.slice(0, 1), legacyBareNext: true, id: 'drop:PUSH@"UNLOCKED"' });
+  const thin = applyMutations({ specModule: refSpec, contract: tsContract, windows: tsWindows.slice(0, 1), id: 'drop:PUSH@"UNLOCKED"' });
   ok('unexercised rule reports a corpus blind spot',
     thin.reports[0].status === 'blind-spot' && /ZERO windows flipped/.test(renderReports(thin)));
 
@@ -694,12 +743,12 @@ console.log('12) scripted negative control (scripts/mutate.mjs) — the control 
   // usage error -> 2.
   const { spawnSync } = await import('node:child_process');
   const MUT = join(HERE, '..', 'scripts', 'mutate.mjs');
-  const cliOk = spawnSync('node', [MUT, '--spec', join(EX, 'specs', 'reference.js'), '--contract', join(EX, 'contract.json'), '--traces', join(EX, 'traces'), '--legacy-bare-next', '--all'], { encoding: 'utf-8' });
+  const cliOk = spawnSync('node', [MUT, '--spec', join(EX, 'specs', 'reference.js'), '--contract', join(EX, 'contract.json'), '--traces', join(EX, 'traces'), '--all'], { encoding: 'utf-8' });
   ok('CLI --all exits 0 when the corpus discriminates every distinguishable rule', cliOk.status === 0);
   const thinDir = join(TMP, 'thin-traces');
   mkdirSync(thinDir, { recursive: true });
   writeFileSync(join(thinDir, 's1.ndjson'), JSON.stringify({ pre: { state: 'LOCKED', coins: 0 }, action: 'COIN', data: {}, post: { state: 'UNLOCKED', coins: 1 } }) + '\n', 'utf-8');
-  const cliBlind = spawnSync('node', [MUT, '--spec', join(EX, 'specs', 'reference.js'), '--contract', join(EX, 'contract.json'), '--traces', thinDir, '--legacy-bare-next', '--all'], { encoding: 'utf-8' });
+  const cliBlind = spawnSync('node', [MUT, '--spec', join(EX, 'specs', 'reference.js'), '--contract', join(EX, 'contract.json'), '--traces', thinDir, '--all'], { encoding: 'utf-8' });
   ok('CLI --all exits 1 on a corpus blind spot (a control that cannot fail is a failed control)', cliBlind.status === 1);
   const cliUsage = spawnSync('node', [MUT, '--spec', 'x.js'], { encoding: 'utf-8' });
   ok('CLI usage error exits 2', cliUsage.status === 2 && /usage: mutate\.mjs/.test(cliUsage.stderr));

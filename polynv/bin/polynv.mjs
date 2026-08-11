@@ -287,6 +287,7 @@ try {
       ? [
           ...(artifacts.invariants ?? []).map((inv) => ({ id: `invariants.mjs:state:${inv.name}`, target: 'state', pred: inv.pred })),
           ...(artifacts.transitionInvariants ?? []).map((inv) => ({ id: `invariants.mjs:transition:${inv.name}`, target: 'transition', pred: inv.pred })),
+          ...(artifacts.rejectionInvariants ?? []).map((inv) => ({ id: `invariants.mjs:rejection:${inv.name}`, target: 'rejection', pred: inv.pred })),
         ]
       : [];
     const grade = runGrade(artifacts, ledger, { maxMutants: numFlag('max-mutants'), maxStates: numFlag('max-states'), extraOracle });

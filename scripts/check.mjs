@@ -1,37 +1,44 @@
-// Explicit-state model checker for a bare-next() spec.
+// Explicit-state model checker for a SAM v2 strict-profile module.
 //
-// This is the SECOND half of the method. Replay (tv.mjs) checks whether a
+// This is the SECOND half of the method. Replay (sam-tv.mjs) checks whether a
 // derived spec CONFORMS to real traces — it finds a bug only when the spec
 // DISAGREES with the code, which a faithful spec does not (see
 // eval/FINDING-faithful-reproduction.md). This checker does what you actually
-// write a spec FOR: it ITERATES the total pure relation next(state, action,
-// data) exhaustively — every reachable state from init() over a finite
-// action/data domain — and checks INVARIANTS (rules encoding intent) at each
-// state and transition. A faithful spec that copied a bug will, when explored,
-// REACH a state that violates an intent-invariant, with a shortest
-// counterexample path. That is a bug the replay cannot see.
+// write a spec FOR: it ITERATES the module's transition relation exhaustively
+// — every reachable state from init() over the finite (intent, data) domain
+// the module's own manifest() declares — and checks INVARIANTS (rules encoding
+// intent) at each state and transition. A faithful spec that copied a bug
+// will, when explored, REACH a state that violates an intent-invariant, with a
+// shortest counterexample path. That is a bug the replay cannot see.
+//
+// The transition relation is NEVER hand-authored. It is derived mechanically
+// from the SAM module by scripts/sam-adapter.cjs (makeSamAdapter), which is
+// the only supported way into the explorer below.
 //
 // Deterministic: no API, no randomness, no clock.
 //
-// Module usage:  check({ specPath, contract, invariants, windows, maxStates, initialStates })
-// CLI:  node check.mjs --spec <mod.js> --contract <c.json> --invariants <inv.mjs> [--traces <dir>] [--initial-states <states.json>] [--max-states N] [--json out]
+// Module usage:  check({ specModule, contract, invariants, maxStates, initialStates })
+// CLI:  node check.mjs --spec <mod.js> --contract <c.json> --invariants <inv.mjs> [--initial-states <states.json>] [--max-states N] [--json out]
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { loadWindows } from './replay.mjs';
 import { loadSpec, stable, dataFieldsOf } from './load-spec.mjs';
 import samAdapter from './sam-adapter.cjs';
 
 const { isSamV2Module, makeSamAdapter, domainFromManifest } = samAdapter;
 
 // Re-export the shared loader (eval scripts and older callers import it from
-// here). ONE loader for the whole pipeline lives in load-spec.mjs; tv.mjs
-// keeps an internal copy (keep-in-sync comments in both files).
+// here). ONE loader for the whole pipeline lives in load-spec.mjs.
 export { loadSpec };
 
 // ── Build the (action, data) domain from the contract + observed traces ────
 // dataDomain in the contract wins; otherwise values are inferred from the trace
 // corpus; an action with no data fields contributes a single {} step.
+//
+// NOT the checker's exploration domain — that comes from the module's own
+// manifest() (sam-adapter.domainFromManifest). This is the CONTRACT-side view,
+// used to report declared-but-unenumerable actions (polygen's domain-gap
+// notes, polynv's grade).
 export function buildDomain(contract, windows = []) {
   const actions = Object.keys(contract.actions || {});
   const observed = {}; // action -> field -> Set(values)
@@ -75,10 +82,10 @@ export function buildDomain(contract, windows = []) {
 
 /**
  * Explore the reachable state graph of a spec and check invariants. The spec
- * is either a legacy {init, next} module or a v2 SAM strict-profile module
- * ({instance, init, actions, getState, setState} — auto-detected, driven
- * through scripts/sam-adapter.cjs with manifest() domains; pass
- * legacyBareNext: true to force the bare-next path).
+ * is a v2 SAM strict-profile module ({instance, init, actions, getState,
+ * setState}), driven through scripts/sam-adapter.cjs with manifest() domains
+ * — or, for internal callers only, an already-adapted {init, transition}
+ * relation together with an explicit `steps` domain.
  * invariants = { stateInvariants: [{name, pred:(state)=>bool}],
  *                transitionInvariants: [{name, pred:(pre,action,data,post)=>bool}] }
  * A predicate returns TRUE when the rule HOLDS; a FALSE (or throw) is a violation.
@@ -106,18 +113,42 @@ const stderrLine = (line) => { try { process.stderr.write(line + '\n'); } catch 
 // as likely unbounded (see the drift detector inside explore()); exposed as an
 // option for tests — the default is deliberately far below the maxStates
 // default so a runaway machine warns long before the cap grinds.
-export function check({ specModule, contract, invariants = {}, windows = [], maxStates = 100000, legacyBareNext = false, initialStates = [], steps: providedSteps = null, driftThreshold = 1000 }) {
-  // ── Engine selection ──────────────────────────────────────────────────────
-  // A v2 SAM strict-profile module is driven through the {init,next} adapter
-  // (rejections return the input state — a legal, observable no-op) with the
-  // (action, data) domain read from the spec's OWN manifest() declarations
-  // instead of buildDomain() inference — the "silently EXCLUDED from
-  // exploration" failure class disappears by construction. --legacy-bare-next
-  // forces the bare-next path even for a module that happens to look v2.
+export function check({ specModule, contract, invariants = {}, maxStates = 100000, initialStates = [], steps: providedSteps = null, driftThreshold = 1000 }) {
+  // ── Admission ─────────────────────────────────────────────────────────────
+  // TWO shapes are admitted, and neither is hand-authorable:
+  //   1. a v2 SAM strict-profile module — driven through the {init,transition}
+  //      adapter (rejections return the input state, a legal observable no-op)
+  //      with the (action, data) domain read from the spec's OWN manifest();
+  //   2. an ALREADY-ADAPTED relation {init, transition} — produced only by
+  //      makeSamAdapter or by mutating its output (scripts/mutate.mjs, polynv's
+  //      mutation grade), and admitted only WITH an explicit `steps` domain,
+  //      since a bare relation carries no manifest to read one from.
+  // A 1.x bare-next module ({init, next}) satisfies neither and is refused.
   let mod = specModule;
   let steps, notes;
-  let engine = 'legacy';
-  if (!legacyBareNext && isSamV2Module(specModule)) {
+  let internalKeys = [];
+  let engine = 'sam-v2';
+  const preAdapted = !!specModule
+    && typeof specModule.transition === 'function'
+    && typeof specModule.init === 'function'
+    && !isSamV2Module(specModule);
+  if (preAdapted) {
+    if (!providedSteps) {
+      return { ok: false, error: 'an adapted {init, transition} relation must be explored over an explicit `steps` domain (it carries no manifest())', statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [], engine: 'adapted' };
+    }
+    engine = 'adapted';
+    steps = providedSteps;
+    notes = [];
+  } else if (!isSamV2Module(specModule)) {
+    const legacy = specModule && typeof specModule.next === 'function' && typeof specModule.init === 'function';
+    return {
+      ok: false,
+      error: legacy
+        ? "spec exports a bare next(state, action, data) — the 1.x artifact contract, removed in 8.0.0. Author a SAM v2 strict-profile module (polygen writes one; see examples/turnstile-v2)."
+        : 'spec must export the v2 SAM surface { instance, init, actions, getState, setState }',
+      statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [], engine: null,
+    };
+  } else {
     try {
       mod = makeSamAdapter(specModule);
       // The library's own obligation check FIRST: a module with no named
@@ -131,8 +162,26 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
           return { ok: false, error: `v2 module fails validate(): ${problems.join('; ')}`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [], engine: 'sam-v2' };
         }
       }
+      // modelShape semantics the relation cannot carry (#2/#4 of the SAM-v2
+      // audit): a `derived: true` key is reactor-owned state — the strict
+      // profile pins reactors: [], so a derived key means the module's state
+      // is partly computed OUTSIDE the acceptor step the checker explores.
+      // Refused. An `internal: true` key is legal but structurally pinned at
+      // its init value during exploration (the adapter's reset-then-merge
+      // purity discipline), so behavior gated on it is NOT explored — and the
+      // frozen-key scan cannot even see it. Noted loudly, per key.
+      const shape = specModule.instance({}).manifest()?.modelShape || null;
+      const derivedKeys = shape ? Object.keys(shape).filter((k) => shape[k] && shape[k].derived === true) : [];
+      if (derivedKeys.length) {
+        return { ok: false, error: `modelShape declares reactor-owned (derived: true) key(s) ${derivedKeys.map((k) => `'${k}'`).join(', ')} — the strict profile requires reactors: [], and state computed outside the acceptor step cannot be explored faithfully`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [], engine: 'sam-v2' };
+      }
       let intentNames;
       ({ steps, notes, intentNames } = domainFromManifest(specModule));
+      // Own field, NOT domainNotes: downstream consumers (polygen's
+      // domain-gap repair, polynv precheck) read domainNotes as "alphabet was
+      // pruned", which this is not — it is a structural-blindness warning,
+      // the internal-key sibling of frozenKeys.
+      internalKeys = shape ? Object.keys(shape).filter((k) => shape[k] && shape[k].internal === true) : [];
       engine = 'sam-v2';
       // The manifest is the exploration domain; a contract action missing
       // from it is silently unexplored unless we say so here. (Intents that
@@ -143,25 +192,37 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
       for (const a of Object.keys(contract?.actions || {})) {
         if (!manifestIntents.has(a)) notes.push(`contract action '${a}' is not in the module's manifest() — NOT explored`);
       }
+      // An explicit domain still wins for a v2 module: callers that must
+      // explore two modules over the SAME alphabet (polynv's mutation grade)
+      // pass the original's steps so a verdict can never be a domain artifact.
+      if (providedSteps) { steps = providedSteps; notes = []; }
     } catch (e) {
       return { ok: false, error: `v2 SAM module rejected by the adapter: ${e && e.message}`, statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [], engine: 'sam-v2' };
     }
-  } else {
-    if (!mod || typeof mod.next !== 'function' || typeof mod.init !== 'function') {
-      return { ok: false, error: 'spec must export init() and next() (or the v2 SAM surface)', statesExplored: 0, capHit: false, violations: [], domainNotes: [], frozenKeys: [], driftWarnings: [] };
-    }
-    ({ steps, notes } = providedSteps ? { steps: providedSteps, notes: [] } : buildDomain(contract, windows));
   }
   // An empty exploration domain would visit only init() and pass every
   // invariant vacuously — that is a failed check, never a clean one.
   if (!steps.length) {
     const why = engine === 'sam-v2'
       ? "the module's manifest() yields no explorable (action, data) steps"
-      : 'the contract declares no explorable actions (no dataDomain, none inferable from traces)';
+      : 'the caller supplied an empty `steps` domain';
     return { ok: false, error: `exploration domain is empty — ${why}${notes.length ? ` [${notes.join('; ')}]` : ''}`, statesExplored: 0, capHit: false, violations: [], domainNotes: notes, frozenKeys: [], driftWarnings: [], engine };
   }
   const stateInv = invariants.stateInvariants || [];
   const transInv = invariants.transitionInvariants || [];
+  // Rejection invariants: pred(state, action, data, verdict) with verdict
+  // { rejected: bool, reason: string|null } — TRUE when the rule HOLDS. This
+  // is the invariant class bare-next could never express: an obligation ABOUT
+  // the rejection itself ("PUSH while LOCKED must be REJECTED, with reason
+  // X"), not merely about the post-state (post == pre is a weaker claim a
+  // silently no-oping acceptor also satisfies).
+  const rejInv = invariants.rejectionInvariants || [];
+  const hasStep = typeof mod.step === 'function';
+  if (rejInv.length && !hasStep) {
+    // A pre-adapted bare relation carries no verdicts — evaluating rejection
+    // obligations over it would pass vacuously. Refuse, never silently skip.
+    return { ok: false, error: 'rejectionInvariants need step() verdicts (a v2 SAM module through the adapter) — the supplied {init, transition} relation carries none', statesExplored: 0, capHit: false, violations: [], domainNotes: notes, frozenKeys: [], driftWarnings: [], engine };
+  }
 
   // One full BFS exploration. Kept as an inner function so the determinism
   // double-pass below can run it twice under identical inputs. `live` labels
@@ -170,6 +231,7 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   // deterministic but printed only on pass 1 to avoid duplicates).
   const explore = (live = null) => {
     const violations = [];
+    const rejectionsSeen = new Map(); // reason -> count of explored rejected steps
     // ── Runaway guardrails (eval/FINDING-raft-field-study.md, lesson 2) ─────
     // An action that mints a fresh state forever (an unbounded monotonic
     // counter: raft's ElectionTimeout term bump) turns the default cap into a
@@ -283,15 +345,36 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
       const [s, sKey] = queue[head++];
       const sJson = JSON.stringify(s); // one stringify per state, one parse per step
       for (const { action, data } of steps) {
-        let post;
-        try { post = mod.next(JSON.parse(sJson), action, data); }
+        let post, verdict;
+        try {
+          if (hasStep) {
+            const r = mod.step(JSON.parse(sJson), action, data);
+            post = r.state;
+            verdict = { rejected: r.verdict === 'rejected', reason: r.reason ?? null };
+          } else {
+            post = mod.transition(JSON.parse(sJson), action, data);
+            verdict = null; // bare relation: no rejection semantics available
+          }
+        }
         catch (e) {
-          record(`next() threw on ${action}`, 'throw', [...pathTo(sKey), { action, data, state: `THREW: ${e && e.message}` }], String(e && e.message || e));
+          record(`step threw on ${action}`, 'throw', [...pathTo(sKey), { action, data, state: `THREW: ${e && e.message}` }], String(e && e.message || e));
           continue;
         }
-        // transition invariants
+        // Rejection coverage: which declared reasons actually fire, and where.
+        if (verdict && verdict.rejected) {
+          const key = verdict.reason === null ? '(no reason)' : String(verdict.reason);
+          rejectionsSeen.set(key, (rejectionsSeen.get(key) || 0) + 1);
+        }
+        // rejection invariants — obligations about the verdict itself
+        for (const inv of rejInv) {
+          let ok; try { ok = inv.pred(s, action, data, verdict); } catch { ok = false; }
+          if (!ok) record(inv.name, 'rejection', [...pathTo(sKey), { action, data, state: post, ...(verdict && verdict.rejected ? { rejected: true, reason: verdict.reason } : {}) }], verdict && verdict.rejected ? `${action} was REJECTED (reason: ${JSON.stringify(verdict.reason)}) from this state, violating the rule` : `${action} was ACCEPTED from this state, violating the rule`);
+        }
+        // transition invariants (verdict is an ADDITIVE 5th argument — a
+        // 4-parameter pred ignores it; graph collectors read it to put
+        // verdicts on edges)
         for (const inv of transInv) {
-          let ok; try { ok = inv.pred(s, action, data, post); } catch { ok = false; }
+          let ok; try { ok = inv.pred(s, action, data, post, verdict); } catch { ok = false; }
           if (!ok) record(inv.name, 'transition', [...pathTo(sKey), { action, data, state: post }], `violated by ${action} from this state`);
         }
         const pKey = stable(post);
@@ -324,7 +407,7 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
       if (live === 'pass 1') stderrLine(`[check] exploration completed without hitting the cap — earlier drift warning(s) retracted; the flagged key(s) turned out bounded`);
       driftWarnings.length = 0;
     }
-    return { parent, violations, capHit, seededStates, driftWarnings };
+    return { parent, violations, capHit, seededStates, driftWarnings, rejectionsSeen };
   };
 
   // ── Determinism double-pass ───────────────────────────────────────────────
@@ -336,6 +419,7 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   const digestOf = (r) => stable({
     states: [...r.parent.keys()].sort(),
     violations: r.violations.map((v) => ({ invariant: v.invariant, kind: v.kind, detail: v.detail })),
+    rejections: r.rejectionsSeen ? [...r.rejectionsSeen.entries()].sort() : [],
     capHit: r.capHit,
     error: r.error || null,
   });
@@ -343,7 +427,7 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   const pass2 = explore('pass 2');
   const nondeterministic = digestOf(pass1) !== digestOf(pass2);
 
-  const { parent, violations, capHit, error, seededStates, driftWarnings } = pass1;
+  const { parent, violations, capHit, error, seededStates, driftWarnings, rejectionsSeen } = pass1;
   if (error) return { ok: false, error, statesExplored: 0, capHit: false, violations: [], domainNotes: notes, frozenKeys: [], driftWarnings, engine, seededStates: 0 };
 
   // ── Frozen-field scan ─────────────────────────────────────────────────────
@@ -393,7 +477,27 @@ export function check({ specModule, contract, invariants = {}, windows = [], max
   // statesExplored counts what exploration DISCOVERED (init + BFS finds);
   // seeded roots are reported separately so a seeded run cannot overstate
   // its coverage by counting states it was merely handed.
-  return { ok: violations.length === 0, statesExplored: parent.size - seededStates, seededStates, capHit, violations, domainNotes: notes, frozenKeys, driftWarnings, engine, nondeterministic };
+  // ── Rejection coverage (the specialRules cross-check) ─────────────────────
+  // The contract's specialRules are rendered into the generation prompt as
+  // REQUIRED reject(reason) cases and verified by REPLAY against whatever
+  // windows the corpus happens to contain. This is the exhaustive-tier half:
+  // over the whole explored graph, did each declared rejection actually fire
+  // with its declared reason? A declared rule that never fires is either
+  // unreachable over the explored domain or mis-reasoned in the code — both
+  // worth a loud warning (qualified by capHit: a truncated exploration proves
+  // nothing about absence).
+  let rejectionReport = null;
+  if (hasStep) {
+    const declared = (contract?.specialRules || []).map((r) => r && r.name).filter(Boolean);
+    const fired = Object.fromEntries([...rejectionsSeen.entries()].sort());
+    rejectionReport = {
+      fired,
+      declared,
+      missing: declared.filter((name) => !rejectionsSeen.has(name)),
+      bounded: capHit,
+    };
+  }
+  return { ok: violations.length === 0, statesExplored: parent.size - seededStates, seededStates, capHit, violations, domainNotes: notes, frozenKeys, driftWarnings, engine, nondeterministic, rejectionReport, internalKeys };
 }
 
 // ── Readable render ─────────────────────────────────────────────────────────
@@ -413,6 +517,23 @@ export function render(result) {
   for (const f of result.frozenKeys || []) {
     L.push(`WARNING: state key '${f.key}' is frozen at ${JSON.stringify(f.value)} — no explored action or seed ever changes it; if it gates behavior, this check cannot verify that behavior (seed --initial-states or capture traces with a non-default value)`);
   }
+  // Internal keys: the modelShape sibling of the frozen-key warning — pinned
+  // at init values by the adapter's purity discipline, invisible to the
+  // frozen scan itself.
+  for (const k of result.internalKeys || []) {
+    L.push(`WARNING: internal modelShape key '${k}' is pinned at its init value during exploration — behavior gated on a non-default value of it is NOT explored (and is invisible to the frozen-key scan)`);
+  }
+  // Rejection coverage: the exhaustive-tier cross-check of the contract's
+  // specialRules — each declared rejection must actually FIRE somewhere in
+  // the explored graph, with its declared reason.
+  const rr = result.rejectionReport;
+  if (rr) {
+    const firedNames = Object.keys(rr.fired);
+    if (firedNames.length) L.push(`rejections explored: ${firedNames.map((n) => `${n} ×${rr.fired[n]}`).join(', ')}`);
+    for (const name of rr.missing) {
+      L.push(`WARNING: declared special rule '${name}' NEVER fired as a rejection over the explored graph${rr.bounded ? ' (exploration was bounded — raise --max-states before reading this as absence)' : ''} — the rule is unreachable over the declared domain, or the code rejects with a different reason`);
+    }
+  }
   if (result.ok) {
     L.push(notes.length
       ? `no invariant violations reachable over the EXPLORED alphabet ✓ (${notes.length} action/field(s) skipped — see warnings above)`
@@ -428,7 +549,7 @@ export function render(result) {
     v.path.forEach((step, i) => {
       const st = typeof step.state === 'string' ? step.state : JSON.stringify(step.state);
       if (i === 0 && step.action === null) L.push(`      ${fromSeed ? 'seed' : 'init'}            ${st}`);
-      else L.push(`      ${step.action}(${JSON.stringify(step.data)}) -> ${st}`);
+      else L.push(`      ${step.action}(${JSON.stringify(step.data)}) -> ${st}${step.rejected ? ` [REJECTED: ${JSON.stringify(step.reason)}]` : ''}`);
     });
   }
   return L.join('\n');
@@ -444,10 +565,9 @@ async function loadInvariants(path) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = {};
   for (let i = 2; i < process.argv.length; i++) if (process.argv[i].startsWith('--')) { args[process.argv[i].slice(2)] = process.argv[i + 1]; i++; }
-  if (!args.spec || !args.contract) { console.error('usage: node check.mjs --spec <mod.js> --contract <c.json> [--invariants <inv.mjs>] [--traces <dir>] [--initial-states <states.json>] [--max-states N] [--json out]'); process.exit(2); }
+  if (!args.spec || !args.contract) { console.error('usage: node check.mjs --spec <mod.js> --contract <c.json> [--invariants <inv.mjs>] [--initial-states <states.json>] [--max-states N] [--json out]'); process.exit(2); }
   const contract = JSON.parse(readFileSync(args.contract, 'utf-8'));
   const invariants = await loadInvariants(args.invariants);
-  const windows = args.traces ? loadWindows(args.traces) : [];
   const specModule = loadSpec(args.spec);
   // --initial-states: a .json array of state objects seeded into the BFS
   // alongside init() — the versioning check "can any of THESE states be
@@ -464,7 +584,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const bad = initialStates.findIndex((s) => !s || typeof s !== 'object' || Array.isArray(s));
     if (bad >= 0) { console.error(`--initial-states '${args['initial-states']}': element ${bad} is not a state object — seeding non-states would report input garbage as machine findings`); process.exit(2); }
   }
-  const result = check({ specModule, contract, invariants, windows, maxStates: Number(args['max-states'] || 100000), initialStates });
+  const result = check({ specModule, contract, invariants, maxStates: Number(args['max-states'] || 100000), initialStates });
   console.log(render(result));
   if (args.json) { const { writeFileSync } = await import('node:fs'); writeFileSync(args.json, JSON.stringify(result, null, 2)); }
   process.exit(result.ok ? 0 : 1);

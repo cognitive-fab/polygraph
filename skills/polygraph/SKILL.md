@@ -1,6 +1,6 @@
 ---
 name: polygraph
-description: A polygraph for your state machine. Audit a stateful piece of code end-to-end: YOU (the agent) instrument a copy, build any test doubles needed to run it, and capture real execution traces, then derive a transition-function spec from its source with an LLM (default artifact: a SAM v2 strict-profile module — named intents/schemas/domains, keyed acceptors, observable reject(reason), sealed model, next-state (prime) acceptors; --legacy-bare-next keeps the original bare next(state, action, data) contract), replay the traces against it, model-check it against invariants, and surface every disagreement as a spec-error, a code-finding, or a contract-error. Optional --tla tier escalates the winning spec to TLC. Use when the user wants to verify a state machine, workflow, reducer, or protocol implementation against its own behavior; check whether code does what it is believed to do; or reproduce/triage suspected state-handling defects. Trigger phrases: "polygraph", "verify this state machine", "check my reducer/workflow", "does this code do what I think", "audit the payment/order/session flow", "bare next / trace validation", "SAM spec verification".
+description: A polygraph for your state machine. Audit a stateful piece of code end-to-end: YOU (the agent) instrument a copy, build any test doubles needed to run it, and capture real execution traces, then derive a transition-function spec from its source with an LLM (default artifact: a SAM v2 strict-profile module — named intents/schemas/domains, keyed acceptors, observable reject(reason), sealed model, next-state (prime) acceptors), replay the traces against it, model-check it against invariants, and surface every disagreement as a spec-error, a code-finding, or a contract-error. Optional --tla tier escalates the winning spec to TLC. Use when the user wants to verify a state machine, workflow, reducer, or protocol implementation against its own behavior; check whether code does what it is believed to do; or reproduce/triage suspected state-handling defects. Trigger phrases: "polygraph", "verify this state machine", "check my reducer/workflow", "does this code do what I think", "audit the payment/order/session flow", "bare next / trace validation", "SAM spec verification".
 ---
 
 # Polygraph — a polygraph for your state machine
@@ -55,8 +55,9 @@ load-time error instead of a silent zero, statement order can no longer
 change a transition's meaning, the checker's exploration domains come from
 the module's own manifest, every check runs a determinism double-pass, and
 the spec is mechanically transpilable to TLA+ (`--tla`). The original bare
-`next(state, action, data)` artifact remains available end-to-end behind
-`--legacy-bare-next` for one release. (2.0-form strict modules — acceptors
+`next(state, action, data)` artifact was REMOVED in 8.0.0: it is refused by the
+prompt builder, the replayer, the checker, and the mutation control alike.
+(2.0-form strict modules — acceptors
 that write `model.x` directly — throw `SamShapeError` under 2.1: migrate
 them, see sam-pattern's docs/MIGRATION.md.)
 
@@ -181,8 +182,7 @@ Before involving the model, establish that the replay discriminates:
     Capture a trace that drives it before trusting a clean run. This is the
     trace-side twin of the checker's FROZEN STATE KEY warning.
 
-  `--list` shows the mutation ids; `--apply <id>` runs one. Add
-  `--legacy-bare-next` for a bare-next reference.
+  `--list` shows the mutation ids; `--apply <id>` runs one.
 
 ## Step 4 — Generate and replay
 
@@ -202,8 +202,6 @@ live spec rejected ≥2 windows the code acted on), verify **auto-regenerates
 once** with the offending branches called out and reports the second pass —
 both spec sets are preserved (`specs/`, `specs_regen/`); `--no-auto-regen`
 disables this.
-Add `--legacy-bare-next` to run the whole loop on the legacy bare-next
-artifact instead (prompt, replayer, and checker domains all follow the flag).
 
 If every window comes back `unscoreable-all`, the generations were empty — with
 a reasoning model (e.g. `claude-opus-5`) the thinking block spent the token
@@ -216,8 +214,8 @@ This is a live risk for this tool specifically: every prompt it sends is
 "here is code, here is how it might be wrong," which is also what exploit
 research looks like, so a source file whose own comments describe a bug can
 trip the classifier. Switch `--model` (it has been model-specific in practice:
-on 2026-07-24 `claude-opus-5` refused two eval machines on the legacy bare-next
-prompt that `claude-opus-4-8` and `claude-sonnet-5` accepted), or configure a
+on 2026-07-24 `claude-opus-5` refused two eval machines on the since-removed
+bare-next prompt that `claude-opus-4-8` and `claude-sonnet-5` accepted), or configure a
 fallback model.
 
 ## Step 4b — Model-check the spec against invariants (THE BUG-FINDER)
@@ -336,7 +334,8 @@ checked against an explicit environment.
 
 The design follows the SysMoBench paper's findings (and its v2 postscript).
 The paper's data splits Polygraph's two roles: as a **replay oracle**, the
-bare-next artifact plus one discipline sentence was the best performer for
+the (now removed) bare-next artifact plus one discipline sentence was the
+best performer for
 pure trace conformance — and the control showed it was the sentence, not the
 structure, that carried the robustness. That sentence is kept **verbatim** in
 the v2 prompts: "Acceptors must guard against invalid proposals (an action

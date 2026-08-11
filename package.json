@@ -1,6 +1,6 @@
 {
   "name": "polygraph",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "description": "A polygraph for your state machine: an LLM derives a transition-function spec from your code (default: SAM v2 strict-profile module; --legacy-bare-next for the bare next(state, action, data) artifact), then Polygraph replays real traces against it (conformance) AND model-checks it against invariants (finds bugs by exhaustive iteration), with an optional TLC escalation tier (--tla). Also includes polygen: author NEW verifiable code from a feature description.",
   "type": "module",
   "license": "Apache-2.0",
@@ -25,10 +25,9 @@
     "code-generation"
   ],
   "scripts": {
-    "test": "node test/selftest.mjs && node test/selftest-v2.mjs && node test/selftest-prompts.mjs && node test/selftest-polygen.mjs && node test/selftest-tla.mjs",
+    "test": "node test/selftest-pipeline.mjs && node test/selftest-v2.mjs && node test/selftest-prompts.mjs && node test/selftest-polygen.mjs && node test/selftest-tla.mjs",
     "test:tla": "node test/selftest-tla.mjs",
     "test:polygen": "node test/selftest-polygen.mjs",
-    "test:legacy": "node test/selftest.mjs",
     "test:v2": "node test/selftest-v2.mjs",
     "test:prompts": "node test/selftest-prompts.mjs",
     "test:polyrun": "node --no-warnings --test polyrun/test/kernel.test.mjs polyrun/test/m1.test.mjs polyrun/test/m2.test.mjs polyrun/test/m3.test.mjs polyrun/test/check-product.test.mjs polyrun/test/simulate.test.mjs polyrun/test/soak.test.mjs",
@@ -46,7 +45,6 @@
     "demo:todo": "node --no-warnings examples/todo-machine/demo/run-demo.mjs",
     "todo": "node --no-warnings examples/todo-machine/bin/todo-server.mjs",
     "oms": "node --no-warnings examples/polyrun-oms/bin/oms-server.mjs",
-    "verify:turnstile": "node scripts/verify.mjs --contract examples/turnstile/contract.json --traces examples/turnstile/traces --specs examples/turnstile/specs --legacy-bare-next --out examples/turnstile/out",
     "verify:turnstile-v2": "node scripts/verify.mjs --contract examples/turnstile-v2/contract.json --traces examples/turnstile-v2/traces --specs examples/turnstile-v2/specs --out examples/turnstile-v2/out",
     "check": "node scripts/check.mjs",
     "polygen": "node scripts/polygen.mjs",
@@ -55,7 +53,8 @@
     "eval:ab": "node eval/skill-ab.mjs",
     "eval:ab-v2": "node eval/ab-v2.mjs",
     "study:tier1": "node eval/fleet-study/tier1/run.mjs",
-    "study:capture": "node examples/fleet-study-stripe/capture/capture.mjs --offline"
+    "study:capture": "node examples/fleet-study-stripe/capture/capture.mjs --offline",
+    "test:pipeline": "node test/selftest-pipeline.mjs"
   },
   "bin": {
     "polygraph": "scripts/verify.mjs",

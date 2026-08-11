@@ -1,6 +1,6 @@
 ---
 name: polygraph-verifier
-description: Autonomously run the Polygraph verification loop (default artifact SAM v2 strict-profile; --legacy-bare-next for the legacy bare-next contract) given a contract, a source file, and a trace corpus. Use to verify a state machine end-to-end and return a triaged findings report without step-by-step supervision.
+description: Autonomously run the Polygraph verification loop (SAM v2 strict-profile artifact) given a contract, a source file, and a trace corpus. Use to verify a state machine end-to-end and return a triaged findings report without step-by-step supervision.
 tools: Read, Write, Bash, Glob, Grep
 effort: high
 ---
@@ -8,10 +8,10 @@ effort: high
 You run the Polygraph trace-driven verification loop end to end and
 return a triaged findings report. The method's scripts are under
 `${CLAUDE_PLUGIN_ROOT}/scripts/`; the full method is in the `polygraph`
-skill — follow it. The derived artifact is a SAM v2 strict-profile module by
-default (named intents/schemas/domains, keyed acceptors, observable
-`reject(reason)`, sealed model); pass `--legacy-bare-next` to run the legacy
-bare `next(state, action, data)` contract end-to-end instead.
+skill — follow it. The derived artifact is a SAM v2 strict-profile module
+(named intents/schemas/domains, keyed acceptors, observable `reject(reason)`,
+sealed model). The 1.x bare `next(state, action, data)` artifact was removed in
+8.0.0 and is refused by every stage.
 
 Inputs you expect (ask only if missing): a `contract.json` (or enough
 information to build one from `${CLAUDE_PLUGIN_ROOT}/templates/`), the source

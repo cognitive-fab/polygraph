@@ -1,6 +1,6 @@
 ---
-description: Run polygen — draft a contract from a feature description, author a verifiable SAM v2 strict-profile module against it (--legacy-bare-next for a bare next(state, action, data) implementation), self-repair against reachable invariant violations, and synthesize a demo/regression trace corpus.
-argument-hint: --intent "<feature description>" --model <id> [--contract <c.json>] [--lang javascript] [--out out/] [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]
+description: Run polygen — draft a contract from a feature description, author a verifiable SAM v2 strict-profile module against it, self-repair against reachable invariant violations, and synthesize a demo/regression trace corpus.
+argument-hint: --intent "<feature description>" --model <id> [--contract <c.json>] [--lang javascript] [--out out/] [--repair-max 3] [--max-tokens 32000]
 allowed-tools: Bash, Read, Write
 ---
 
@@ -15,7 +15,7 @@ This drives `${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs`:
 node ${CLAUDE_PLUGIN_ROOT}/scripts/polygen.mjs \
   --intent "<feature description>" --model <id> \
   [--contract <c.json>] [--lang javascript] [--out out/] \
-  [--repair-max 3] [--max-tokens 32000] [--legacy-bare-next]
+  [--repair-max 3] [--max-tokens 32000]
 ```
 
 The scripted run needs `ANTHROPIC_API_KEY` and an explicit `--model` (no
@@ -46,8 +46,7 @@ What it does, in order:
 2. Authors the module against that contract — by default a SAM v2
    strict-profile module (named intents/schemas/domains, keyed acceptors,
    `reject(reason)`, sealed model; must load strict-clean through the
-   `validate()` gate), or `init()`/`next(state, action, data)` with
-   `--legacy-bare-next`.
+   `validate()` gate).
 3. Proposes `invariants.mjs` — rules encoding intent, not just behavior.
 4. Self-repairs: model-checks the code against its own invariants (exhaustive
    reachability, same engine as `check.mjs`), and on a reachable violation,

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Artifact A/B eval (P8 ship gate for the v2 switch): run every machine in
-// BOTH artifact arms with the same model and N —
+// the v2 SAM artifact with the same model and N —
 //
-//   legacy — bare next(state, action, data) module (--legacy-bare-next path)
 //   v2     — SAM strict-profile module (the new default)
 //
 // and record, per machine per arm:
@@ -14,15 +13,15 @@
 //   * at least one rejection-reason classification appears in replay results
 //   * the determinism double-pass ran (check() reports `nondeterministic`)
 //
-// Ship criteria (plan P8): v2 detection parity or better vs legacy, and v2
-// dead-spec rate at or below legacy.
 //
 // Run:  ANTHROPIC_API_KEY=... node eval/ab-v2.mjs --model haiku-4.5 [--n 3]
-//       [--machines m01,m02 | m01-m04]  [--arms legacy,v2]
+//       [--machines m01,m02 | m01-m04]
 // Results stream to eval/results/ab-v2-scorecard.json after every machine, so
 // a run killed mid-way (expired key) keeps its partial results.
 //
-// Degraded mode (no API key / key expired): --reference replays each
+// Degraded mode (--reference) is UNAVAILABLE until the eight machines'
+// reference specs are ported to SAM v2 — they are 1.x bare-next artifacts,
+// which the pipeline no longer admits. Historically: --reference replayed each
 // machine's checked-in reference spec instead of generating. reference.cjs is
 // a bare-next artifact, so only the LEGACY arm can run this way; the v2 arm
 // is recorded as BLOCKED (no v2 reference specs exist per machine). The two
@@ -81,7 +80,6 @@ async function loadInvariants(dir) {
 
 /** Run one (machine, arm) cell. Never throws; failures land in the record. */
 async function runArm({ name, dir, arm, contract, source, gt, invariants, apiKey }) {
-  const mode = arm === 'legacy' ? 'legacy' : 'sam';
   const rec = {
     machine: name, arm, n: N,
     specsGenerated: 0, deadSpecs: 0,
@@ -95,7 +93,8 @@ async function runArm({ name, dir, arm, contract, source, gt, invariants, apiKey
     // Replay-only degraded mode: the machine's reference spec stands in for a
     // generation. It is a bare-next artifact — only valid for the legacy arm.
     rec.generative = 'blocked';
-    if (mode !== 'legacy') { rec.error = 'BLOCKED: no v2 reference spec exists for this machine; the v2 arm needs generation (API)'; return rec; }
+    rec.error = 'BLOCKED: eval/machines/*/reference.cjs are 1.x bare-next artifacts, removed in 8.0.0 — port them to SAM v2 to restore the offline arm';
+    return rec;
     const ref = join(dir, 'reference.cjs');
     if (!existsSync(ref)) { rec.error = 'no reference.cjs for this machine'; return rec; }
     specPaths = [ref];
@@ -103,7 +102,7 @@ async function runArm({ name, dir, arm, contract, source, gt, invariants, apiKey
   } else {
     let prompt;
     try {
-      prompt = buildPrompt(contract, source, { filePath: join(dir, 'source.cjs'), lang: 'javascript', mode });
+      prompt = buildPrompt(contract, source, { filePath: join(dir, 'source.cjs'), lang: 'javascript' });
     } catch (e) { rec.error = `buildPrompt: ${e.message}`; return rec; }
 
     const gens = await generateSpecs({ prompt, model: MODEL_ID, n: N, apiKey, maxTokens: MAX_TOKENS });
@@ -122,7 +121,7 @@ async function runArm({ name, dir, arm, contract, source, gt, invariants, apiKey
 
   // ── replay half ──
   const windows = loadWindows(join(dir, 'traces'));
-  const detail = specPaths.map((p) => replaySpecResults(p, windows, mode));
+  const detail = specPaths.map((p) => replaySpecResults(p, windows));
   const matrix = detail.map((resp) => (resp.ok ? resp.results.map((r) => r.status) : windows.map(() => 'unscoreable')));
   const deadIdx = matrix.map((row, i) => (row.every((s) => s === 'unscoreable') ? i : -1)).filter((i) => i >= 0);
   rec.deadSpecs = deadIdx.length;
@@ -141,7 +140,7 @@ async function runArm({ name, dir, arm, contract, source, gt, invariants, apiKey
     let violations = 0;
     for (const p of specPaths) {
       try {
-        const r = check({ specModule: loadSpec(p), contract, invariants, windows, legacyBareNext: mode === 'legacy' });
+        const r = check({ specModule: loadSpec(p), contract, invariants, windows });
         if (r.error) { rec.checkerErrors.push(`${p.replace(/^.*[\\/]/, '')}: ${r.error}`); continue; }
         // v2-only assertion 2: the determinism double-pass ran (check() always
         // reports the flag when it completes; count flagged specs).
@@ -165,7 +164,7 @@ async function main() {
     if (!args.model) { console.error('--model is required (no default model, repo rule).'); process.exit(2); }
   }
   MODEL_ID = args.reference ? 'reference-replay-only' : resolveModel(args.model).id;
-  const arms = args.arms && args.arms !== true ? String(args.arms).split(',') : ['legacy', 'v2'];
+  const arms = ['v2'];
 
   const all = readdirSync(MACHINES_DIR).filter((d) => /^m\d/.test(d)).sort();
   const machines = selectMachines(all, args.machines);

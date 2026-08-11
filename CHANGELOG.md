@@ -3,6 +3,101 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## 8.0.0 — 2026-08-10
+
+**The 1.x bare-next artifact is removed, and the toolset becomes pure
+SAM v2.** `next(state, action, data)` was the 1.x authoring surface; 2.0.0
+made the SAM v2 strict profile the default and kept the old path behind
+`--legacy-bare-next` "for one release". It survived five majors. It is gone
+now, there is no flag to bring it back, and the SAM-v2 audit that followed
+the removal closed the gaps where SAM semantics were still being collapsed
+to a bare state relation.
+
+### Removal
+
+- `--legacy-bare-next` is removed from `verify.mjs`, `polygen.mjs`,
+  `mutate.mjs` and `build_prompt.mjs`, along with the `legacyBareNext`
+  option on `check()`, `enumerateMutations()` and `applyMutations()`.
+- `scripts/tv.mjs` (the bare-next replayer) and `scripts/prompt_template.txt`
+  (the bare-next prompt) are deleted. `replaySpec`/`replaySpecResults` no
+  longer take a `mode`; every polygen prompt builder loses its legacy branch.
+- **The checker's internal relation is renamed.** `makeSamAdapter` returns
+  `{ init, step, transition }`, never `{ init, next }`. A model checker must
+  iterate a transition relation, so the relation stays — but it is derived
+  mechanically from the SAM module, is never hand-authored, and a 1.x module
+  cannot satisfy the shape by accident. `check()` admits a v2 SAM module, or
+  an already-adapted relation WITH an explicit `steps` domain (mutants); a
+  `{ init, next }` module is refused by name — same in polyrun's
+  audit/check-effects, polyvers' corpus, and polynv's grade.
+- `examples/turnstile/` is removed; `examples/turnstile-v2/` gains the
+  negative control (`specs-mutant/mutant.js`) the old example carried.
+  `test/selftest.mjs` becomes `test/selftest-pipeline.mjs`, re-fixtured onto
+  the v2 turnstile.
+- `buildDomain()` stays, but only as the CONTRACT-side domain view (polygen's
+  domain-gap notes). It is no longer a checker engine.
+
+### Rejection semantics survive into the model checker (audit 1/2/4)
+
+- The adapter's `step(state, intent, data)` returns `{ state, verdict,
+  reason }` — the full-fidelity surface; `transition` is its projection onto
+  state. `check()` explores through `step()`: rejected edges carry the
+  acceptor's `reject(reason)`.
+- New invariant class **`rejectionInvariants`**: `pred(state, intent, data,
+  verdict)` with `verdict = { rejected, reason }` — obligations ABOUT the
+  rejection itself ("PUSH while LOCKED must be REJECTED, with reason X"),
+  unstatable under bare-next where post == pre was the strongest available
+  claim. Violations report as kind 'rejection'; counterexample paths
+  annotate rejected steps; supplying them over a bare relation is refused
+  loudly (no verdicts → would pass vacuously).
+- **specialRules cross-check, exhaustive tier**: `check()` returns
+  `rejectionReport` (fired reasons with counts, declared rules, missing); a
+  declared rule that never fires over the explored graph is a loud warning
+  (qualified by capHit) in `check.mjs` render and findings.md. Previously
+  specialRules were verified ONLY by replay, corpus permitting.
+- **Internal-key blindness is visible**: `internal: true` modelShape keys
+  report in their own `internalKeys` field (never `domainNotes`) as the
+  structural-blindness sibling of the frozen-key warning. **Reactor-owned
+  state is refused**: a `derived: true` modelShape key errors in `check()`
+  and is stage-blocking in polygen's `validateV2Module` — the strict profile
+  requires `reactors: []`. Verdicts enter the determinism digest.
+
+### The mutation grade speaks SAM (audit #3)
+
+- Operators are step-level (`(step) => (s, a, d) => { state, verdict,
+  reason }`); `drop` now genuinely rejects, which its describe always
+  claimed. `graphDigest` is verdict-aware for grade equivalence;
+  `scripts/mutate.mjs` stays verdict-blind and excludes the verdict family —
+  a trace corpus records no verdicts.
+- **Family 'verdict'**: `silence:ACTION:reason` (a guard's rejection becomes
+  a silent accepted no-op) and `reason-swap:ACTION:reason` (wrong reason),
+  enumerated per (action, REASON) — a reason names a guard, and silencing a
+  guard is one fault however many states it fires in. Killable only by
+  rejectionInvariants; verdict-family survivors elicit rejection-shaped
+  questions.
+- **Family 'schema'**: `schema-weaken:ACTION.field` drops `required: true`
+  by SOURCE rewrite scoped to the named intent's block, reloads, and
+  explores over the domain PLUS probes with the field removed. Distinctness
+  is by construction (the original refuses every probe with SamSchemaError);
+  acceptor-defended mutants classify equivalent with the defense named;
+  crashers are harness-killed; survivors witness the malformed dispatch.
+  `loadArtifacts` exposes `modulePath`/`moduleSource` additively; the grade
+  reports per-family counts.
+- **Baseline oracle sanity**: an oracle entry the machine itself violates is
+  excluded from the grade with a loud note instead of killing every mutant
+  vacuously.
+- **Deliberately NOT an operator: domain-drop.** A dropped domain entry
+  yields a strict subgraph; safety invariants cannot require an edge to
+  EXIST — every such mutant would be a guaranteed survivor. Domain
+  completeness is contract territory (dataDomain vs manifest), not
+  invariant territory.
+- Grade comparability: 8.0 grades are measured under the six-operator fault
+  model — kill-rates are not comparable to grades recorded before it.
+
+**Known gap:** `eval/machines/*/reference.cjs` are still 1.x artifacts, so
+the offline arms of `eval:ab-v2` and `eval:mechanism` are BLOCKED until
+those eight machines are ported to SAM v2. Both report this loudly rather
+than running.
+
 ## 6.3.0 — 2026-07-25
 
 **Per-step model recommendations as config (`RECOMMENDED_MODELS`).**

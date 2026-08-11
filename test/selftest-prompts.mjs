@@ -1,6 +1,6 @@
 // Self-test for the P3/P5 prompt layer and the polygen v2 stage helpers:
 // the v2 audit prompt template, mode selection in build_prompt.mjs, the seven
-// polygen builders (v2 default + --legacy-bare-next branch), the
+// polygen builders, the
 // retry-on-unloadable transport, and the strict validate() gate.
 // NO API calls; the model transport is mocked where needed.
 //
@@ -90,10 +90,8 @@ ok('no unreplaced template placeholders remain',
   ['{lang}', '{fence}', '{file_path}', '{state_keys}', '{init_state}', '{action_alphabet}',
    '{model_shape}', '{intent_schemas}', '{intent_domains}', '{special_rules_rejections}', '{source_code}']
     .every((p) => !benign.includes(p)));
-const legacyPrompt = buildPrompt(contract, nastySource, { mode: 'legacy' });
-ok('mode legacy still renders the bare-next template',
-  legacyPrompt.includes('module.exports = { init, next };') && !legacyPrompt.includes('modelShape'));
-ok('mode legacy also keeps the source byte-identical', legacyPrompt.includes(nastySource));
+ok('the only template is the v2 one (no bare-next artifact to select)',
+  benign.includes('modelShape') && !benign.includes('module.exports = { init, next };'));
 // The v2 path must hard-fail on a data field without a dataDomain (the domain
 // is also the exploration + transpilation set).
 let domainGateThrew = null;
@@ -103,7 +101,7 @@ try {
 ok('v2 prompt build FAILS LOUDLY when a data field has no dataDomain',
   domainGateThrew !== null && /dataDomain/.test(domainGateThrew) && /GO/.test(domainGateThrew));
 
-console.log('2) P5 — polygen builders (v2 default + legacy branch)');
+console.log('2) P5 — polygen builders');
 const draft = buildContractDraftPrompt('a turnstile', { lang: 'javascript' });
 ok('contract draft keeps the dataDomain-mandatory language',
   /dataDomain: EVERY data field/.test(draft) && /not\s+optional/.test(draft));
@@ -119,9 +117,7 @@ ok('author (v2): init is setState(INITIAL_STATE) only, safe accessor named',
   /setState\(INITIAL_STATE\)/.test(author) && /sam-lib #29/.test(author) && !/clearError idiom is required/.test(author));
 ok('author (v2): whole-key next-draft commit guidance present', COMMIT_RE.test(author));
 ok('author (v2): 2.1 frame rule taught', FRAME_RE.test(author));
-const authorLegacy = buildAuthorPrompt(contract, 'a turnstile', { mode: 'legacy' });
-ok('author (legacy): still the bare-next contract',
-  authorLegacy.includes('module.exports = { init, next };') && !authorLegacy.includes('modelShape'));
+ok('author: no bare-next contract can be selected', !author.includes('module.exports = { init, next };'));
 const violation = { invariant: 'coins-never-negative', kind: 'state', detail: 'reachable state violates the rule', path: [{ action: null, data: null }, { action: 'COIN', data: {} }] };
 const repair = buildRepairPrompt(contract, 'CODE', violation, {});
 ok('repair (v2): discipline sentence + v2 exports + reject-anchored rules',
@@ -140,11 +136,11 @@ ok('repair (v2): determinism flag renders as a first-class section',
 ok('repair (v2): sam-tv classifications (rejected/unhandled) render with reasons',
   /classified 'unhandled'/.test(repairTriaged) && /classified 'rejected'/.test(repairTriaged)
   && /"push-while-locked-is-noop"/.test(repairTriaged) && /'unhandled' means the acceptor neither acted nor rejected/.test(repairTriaged));
-const repairLegacy = buildRepairPrompt(contract, 'CODE', violation, { mode: 'legacy' });
-ok('repair (legacy): unchanged bare-next wording', repairLegacy.includes('module.exports = { init, next }') && !/Determinism flag/.test(repairLegacy));
+ok('repair: no bare-next wording remains', !repair.includes('module.exports = { init, next }'));
 const gapV2 = buildDomainGapRepairPrompt(contract, 'CODE', ['CHARGE.result = "err5xx" (…)'], {});
 ok('domain-gap repair (v2): v2 exports + discipline', gapV2.includes('module.exports = { instance, init, actions, getState, setState }') && DISCIPLINE_RE.test(gapV2));
-ok('domain-gap repair (legacy): bare-next exports', buildDomainGapRepairPrompt(contract, 'CODE', ['g'], { mode: 'legacy' }).includes('module.exports = { init, next }'));
+ok('domain-gap repair: no bare-next exports remain',
+  !buildDomainGapRepairPrompt(contract, 'CODE', ['g'], {}).includes('module.exports = { init, next }'));
 const scen = buildScenariosPrompt(contract, 'CODE', {});
 ok('scenarios (v2): no-ops described as observable reject(reason) windows and payloads pinned to dataDomain',
   /reject\(reason\)/.test(scen) && /dataDomain/.test(scen));
@@ -186,8 +182,8 @@ ok('the v2 reference spec passes the gate',
 {
   let threw = null;
   try { validateV2Module({ init: () => ({}), next: (s) => s }); } catch (e) { threw = e.message; }
-  ok('a legacy bare-next module is rejected, naming the flag',
-    threw !== null && /v2 SAM surface/.test(threw) && /--legacy-bare-next/.test(threw));
+  ok('a bare-next module is rejected by the gate, naming the required surface',
+    threw !== null && /v2 SAM surface/.test(threw));
 }
 {
   const failing = {

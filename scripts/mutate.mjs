@@ -23,8 +23,8 @@
 //     trace-side view of the frozen-key class check.mjs warns about (M1) —
 //     and it exits 1 so a scripted control cannot half-pass silently.
 //
-// v2 SAM strict-profile modules are driven through the same {init,next}
-// adapter the checker uses; --legacy-bare-next forces the bare-next path.
+// The spec is a v2 SAM strict-profile module, driven through the same
+// {init, transition} adapter the checker uses.
 // Deliberate scope cut (recorded in the plan): no --out mutated-spec file —
 // mutants are closures over the adapted surface, and the replay+delta happens
 // here, so nothing in the workflow needs one on disk.
@@ -33,7 +33,6 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadWindows } from './replay.mjs';
 import { loadSpec, stable } from './load-spec.mjs';
-import { buildDomain } from './check.mjs';
 import samAdapter from './sam-adapter.cjs';
 import { generateMutants, graphDigest } from '../polynv/src/grade.mjs';
 import { enumerateGraph } from '../polynv/src/consequences.mjs';
@@ -57,7 +56,7 @@ function replayModule(mod, windows) {
   return windows.map((w) => {
     if (!isScoreable(w)) return 'unscoreable';
     let post;
-    try { post = mod.next(JSON.parse(JSON.stringify(w.pre)), w.action, w.data ?? {}); }
+    try { post = mod.transition(JSON.parse(JSON.stringify(w.pre)), w.action, w.data ?? {}); }
     catch { return 'fail'; }
     if (post === null || typeof post !== 'object') return 'fail';
     return Object.keys(w.post).every((k) => stable(post[k]) === stable(w.post[k])) ? 'pass' : 'fail';
@@ -72,16 +71,15 @@ function replayModule(mod, windows) {
 // enumerated per MUTANT here, twice each via the determinism double-pass;
 // equivalence under a cap is already reported as bounded, so a bigger default
 // buys grind, not soundness — raise it explicitly for a full-equivalence run).
-export function enumerateMutations({ specModule, contract, windows = [], legacyBareNext = false, maxStates = 5000, maxMutants = 40 }) {
-  const v2 = !legacyBareNext && isSamV2Module(specModule);
-  const adapted = v2 ? makeSamAdapter(specModule) : specModule;
-  if (typeof adapted.init !== 'function' || typeof adapted.next !== 'function') {
-    throw new Error('spec must export init() and next() (or the v2 SAM surface)');
+export function enumerateMutations({ specModule, contract, windows = [], maxStates = 5000, maxMutants = 40 }) {
+  if (!isSamV2Module(specModule)) {
+    throw new Error('spec must export the v2 SAM surface { instance, init, actions, getState, setState } — the 1.x bare-next module was removed in 8.0.0');
   }
-  // Alphabet parity with the checker: manifest domain for v2, contract/trace
-  // domain for legacy — mutants and baseline are enumerated over the SAME
-  // steps, so a "behaviorally distinct" verdict can never be a domain artifact.
-  const { steps, notes } = v2 ? domainFromManifest(specModule) : buildDomain(contract, windows);
+  const adapted = makeSamAdapter(specModule);
+  // Alphabet parity with the checker: the module's own manifest domain —
+  // mutants and baseline are enumerated over the SAME steps, so a
+  // "behaviorally distinct" verdict can never be a domain artifact.
+  const { steps, notes } = domainFromManifest(specModule);
   if (!steps.length) throw new Error(`cannot enumerate mutations — the exploration domain is empty${notes.length ? ` (${notes.join('; ')})` : ''}`);
   const baseline = enumerateGraph({ module: adapted, contract }, { maxStates, steps, driftThreshold: Infinity });
   if (baseline.error) throw new Error(`baseline graph failed: ${baseline.error}`);
@@ -92,8 +90,16 @@ export function enumerateMutations({ specModule, contract, windows = [], legacyB
   if (baseline.throws.length || baseline.nondeterministic) {
     throw new Error(`control refused: the reference itself ${baseline.nondeterministic ? 'is nondeterministic' : `throws on ${baseline.throws.length} explored step(s) (first: ${baseline.throws[0].invariant})`} — fix the reference before running a negative control`);
   }
-  const { mutants, dropped, notes: opNotes } = generateMutants(contract, baseline, { maxMutants });
-  return { mutants, dropped, notes: [...notes, ...opNotes], adapted, steps, baseDigest: graphDigest(baseline), baselineBounded: baseline.capHit, maxStates };
+  const { mutants: allMutants, dropped, notes: opNotes } = generateMutants(contract, baseline, { maxMutants });
+  // Family filter: verdict-level operators (silence, reason-swap) mutate the
+  // REJECTION verdict while leaving every state identical — a trace corpus
+  // records no verdicts, so it structurally cannot discriminate them. They
+  // are polynv-grade material (killable by rejectionInvariants); running
+  // them here would only manufacture impossible blind-spot demands.
+  const mutants = allMutants.filter((m) => m.family !== 'verdict');
+  const excluded = allMutants.length - mutants.length;
+  if (excluded) opNotes.push(`${excluded} verdict-family mutant(s) excluded — a trace corpus cannot discriminate verdict-only faults; grade them with polynv rejectionInvariants`);
+  return { mutants, dropped, notes: [...notes, ...opNotes], adapted, steps, baseDigest: graphDigest(baseline, { verdicts: false }), baselineBounded: baseline.capHit, maxStates };
 }
 
 /**
@@ -103,9 +109,9 @@ export function enumerateMutations({ specModule, contract, windows = [], legacyB
  * A window "flips" when the original passes it and the mutant fails it —
  * the corpus demonstrably discriminates the mutated rule.
  */
-export function applyMutations({ specModule, contract, windows, legacyBareNext = false, maxStates, maxMutants, id = null }) {
+export function applyMutations({ specModule, contract, windows, maxStates, maxMutants, id = null }) {
   if (!windows.length) throw new Error('no trace windows — a negative control over an empty corpus proves nothing');
-  const { mutants, dropped, notes, adapted, steps, baseDigest, baselineBounded, maxStates: ms } = enumerateMutations({ specModule, contract, windows, legacyBareNext, maxStates, maxMutants });
+  const { mutants, dropped, notes, adapted, steps, baseDigest, baselineBounded, maxStates: ms } = enumerateMutations({ specModule, contract, windows, maxStates, maxMutants });
   const chosen = id === null ? mutants : mutants.filter((m) => m.id === id);
   if (id !== null && !chosen.length) {
     throw new Error(`no mutation with id '${id}' — run --list for the ${mutants.length} applicable id(s)`);
@@ -123,7 +129,10 @@ export function applyMutations({ specModule, contract, windows, legacyBareNext =
     throw new Error(`control refused: the reference passes ${originalPassed}/${scoreable} scoreable window(s) — the positive control must be 100% before a negative control means anything (fix the reference or the corpus first)`);
   }
   const reports = chosen.map((m) => {
-    const mutant = { init: adapted.init, next: m.wrap(adapted.next.bind(adapted)) };
+    // Wrappers are step-shaped ((step) => (s,a,d) => { state, verdict, reason });
+    // the corpus replay only needs the state projection.
+    const wrapped = m.wrap(adapted.step.bind(adapted));
+    const mutant = { init: adapted.init, step: wrapped, transition: (s, a, d) => wrapped(s, a, d).state };
     // Equivalent-mutant discard (same digest as the polynv grade): a mutant
     // whose reachable graph is identical to the original's is not a rule the
     // corpus FAILED to exercise — no corpus could distinguish it, so calling
@@ -133,7 +142,7 @@ export function applyMutations({ specModule, contract, windows, legacyBareNext =
     // identical prefixes, NOT proof of equivalence.
     const g = enumerateGraph({ module: mutant, contract }, { maxStates: ms, steps, driftThreshold: Infinity });
     const graphNote = g.error ? `mutant graph enumeration failed (${g.error}) — equivalence undetermined, classified by replay only` : null;
-    if (!g.error && !g.throws.length && !g.nondeterministic && graphDigest(g) === baseDigest) {
+    if (!g.error && !g.throws.length && !g.nondeterministic && graphDigest(g, { verdicts: false }) === baseDigest) {
       const bounded = baselineBounded || g.capHit;
       return { id: m.id, describe: m.describe, status: bounded ? 'equivalent-bounded' : 'equivalent' };
     }
@@ -184,7 +193,7 @@ export function renderReports({ reports, dropped, notes, windows, scoreable }) {
 
 // ── CLI ─────────────────────────────────────────────────────────────────────
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const BOOLEAN_FLAGS = new Set(['list', 'all', 'legacy-bare-next']);
+  const BOOLEAN_FLAGS = new Set(['list', 'all']);
   const args = {};
   try {
     for (let i = 2; i < process.argv.length; i++) {
@@ -208,8 +217,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
   } catch (e) {
     console.error(`[mutate] ${e.message}`);
-    console.error('usage: mutate.mjs --spec <mod.js> --contract <c.json> (--list [--traces <dir>] | --apply <mutation-id> --traces <dir> | --all --traces <dir>) [--legacy-bare-next] [--max-states N (default 5000)] [--max-mutants N]');
-    console.error('note: for a legacy contract without dataDomain, the mutation set is enumerated over data values inferred from the traces — pass --traces to --list to see the same ids --apply/--all will use');
+    console.error('usage: mutate.mjs --spec <mod.js> --contract <c.json> (--list [--traces <dir>] | --apply <mutation-id> --traces <dir> | --all --traces <dir>) [--max-states N (default 5000)] [--max-mutants N]');
     process.exit(2);
   }
   try {
@@ -218,7 +226,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const windows = args.traces ? loadWindows(args.traces) : [];
     const common = {
       specModule, contract, windows,
-      legacyBareNext: !!args['legacy-bare-next'],
       ...(args['max-states'] ? { maxStates: Number(args['max-states']) } : {}),
       ...(args['max-mutants'] ? { maxMutants: Number(args['max-mutants']) } : {}),
     };

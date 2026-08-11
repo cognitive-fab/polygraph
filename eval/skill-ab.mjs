@@ -79,7 +79,7 @@ async function polygraphArm(dir, source, contract, fetchImpl, apiKey) {
   if (!specPaths.length) return { error: `no specs generated: ${gens.map((g) => g.error).join('; ')}` };
 
   const windows = loadWindows(join(dir, 'traces'));
-  const matrix = specPaths.map((p) => replaySpec(p, windows, 'legacy')); // A/B arms are bare-next artifacts
+  const matrix = specPaths.map((p) => replaySpec(p, windows));
   // Exclude DEAD specs (unscoreable on every window) before classifying —
   // same partition verify.mjs uses. classify()'s strong verdict requires
   // every status to be 'fail'; one dead spec's unscoreable would otherwise

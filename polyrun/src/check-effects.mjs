@@ -192,7 +192,7 @@ export async function checkEffects(opts) {
     }
     let extended = false;
     for (const step of domain.steps) {
-      const post = adapter.next(node.state, step.action, step.data);
+      const post = adapter.transition(node.state, step.action, step.data);
       const changed = stable(post) !== stable(node.state);
       const cls = changed ? 'mutated' : classify(step.action);
       const accepted = cls === 'mutated' || cls === 'identity-by-mutation';

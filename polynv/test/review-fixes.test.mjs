@@ -27,25 +27,9 @@ const DATE = '2026-07-18T00:00:00.000Z';
 const artifacts = await loadArtifacts(orderV1);
 const graph = enumerateGraph(artifacts);
 
-// A tiny legacy machine whose next() THROWS on one reachable step — the
+// A SAM v2 machine whose BOOM acceptor THROWS on one reachable step — the
 // machine-problem fixture for attribution and graph-completeness tests.
-const throwingContract = {
-  stateKeys: [{ name: 'st', type: "enum: 'a' | 'b'" }, { name: 'n', type: 'integer >= 0' }],
-  initState: { st: 'a', n: 0 },
-  actions: { GO: { dataFields: {} }, BOOM: { dataFields: {} } },
-  dataDomain: { GO: {}, BOOM: {} },
-  terminalKey: 'st',
-  terminalStates: ['b'],
-};
-const throwingModule = {
-  init: () => ({ st: 'a', n: 0 }),
-  next: (s, a) => {
-    if (a === 'BOOM' && s.st === 'a') throw new Error('kaboom');
-    if (a === 'GO' && s.st === 'a') return { st: 'b', n: s.n + 1 };
-    return s;
-  },
-};
-const throwingArtifacts = { module: throwingModule, contract: throwingContract };
+const throwingArtifacts = await loadArtifacts(join(here, 'fixtures', 'throwing'));
 
 // ── finding 1: enumerateGraph surfaces throws/nondeterminism ────────────────
 

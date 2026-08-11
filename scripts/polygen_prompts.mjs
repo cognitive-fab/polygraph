@@ -7,12 +7,10 @@
 // (intent, prior code, violation detail) is interpolated directly and never
 // re-scanned for placeholders.
 //
-// Artifact modes (mirrors build_prompt.mjs):
-//   'sam'    (default) — the authored artifact is a SAM v2 strict-profile
-//            module ({ instance, init, actions, getState, setState }) with
-//            declared modelShape / intent schemas / intent domains and
-//            reject(reason) for everything the design ignores.
-//   'legacy' — the bare next(state, action, data) module (--legacy-bare-next).
+// Artifact (mirrors build_prompt.mjs): a SAM v2 strict-profile module
+// ({ instance, init, actions, getState, setState }) with declared modelShape /
+// intent schemas / intent domains and reject(reason) for everything the design
+// ignores. (The 1.x bare-next artifact was removed in 8.0.0.)
 import {
   renderStateKeys, renderInitState, renderActions, renderSpecialRules, renderTerminalStates,
   renderModelShape, renderIntentSchemas, renderIntentDomains, renderSpecialRulesAsRejections,
@@ -224,61 +222,8 @@ and nothing else (no prose).`;
 }
 
 /** Stage 1: author the machine module satisfying a (possibly just-drafted) contract. */
-export function buildAuthorPrompt(contract, intent, { lang = 'javascript', mode = 'sam' } = {}) {
+export function buildAuthorPrompt(contract, intent, { lang = 'javascript' } = {}) {
   const fence = fenceFor(lang);
-  if (mode === 'legacy') {
-    return `Write a NEW plain ${lang} transition function implementing the feature
-below — NO libraries, NO frameworks, NO I/O. Just a pure function over the
-observable state, built to satisfy the contract exactly.
-
-## Feature intent
-
-${intent}
-
-## Observable state (EXACTLY these keys)
-
-The state is a plain object with EXACTLY these keys — declare no others:
-
-${renderStateKeys(contract)}
-
-Do NOT add any other keys.
-
-## Module contract (hard requirements)
-
-You MUST export exactly:
-
-    module.exports = { init, next };
-
-  - \`init()\` returns the initial state:
-    ${renderInitState(contract)}
-  - \`next(state, action, data)\` is a PURE function returning the NEW state
-    (same keys) after applying ONE action:
-      * \`state\`  — the current state object.
-      * \`action\` — one of the strings, with its data shape:
-${renderActions(contract)}
-    Do NOT mutate \`state\`; return a new object. No I/O, timers, randomness, or
-    external state — model an ambiguous/transient result (e.g. a network
-    timeout) as an explicit data value on the action, handled the same way
-    everywhere it can occur.
-
-## Terminal states
-
-${renderTerminalStates(contract)}
-
-## Special rules (apply ALL of these — do not omit any)
-
-${renderSpecialRules(contract)}
-
-## The no-op rule
-
-An action that does not apply in the current state must return the state
-UNCHANGED (post == pre), never throw and never silently do nothing-but-differ.
-
-## Output
-
-Output EXACTLY ONE fenced \`\`\`${fence} code block containing the module, and
-nothing else (no prose).`;
-  }
   return `You are an expert in the SAM pattern (State-Action-Model,
 https://sam.js.org) — a JavaScript software engineering pattern grounded in
 TLA+ semantics: actions compute proposals, the model accepts or rejects them
@@ -331,10 +276,8 @@ nothing else (no prose).`;
 }
 
 /** Stage 2: propose invariants.mjs given the authored code + the original intent. */
-export function buildInvariantsPrompt(contract, code, intent, { lang = 'javascript', mode = 'sam' } = {}) {
-  const machineNote = mode === 'legacy'
-    ? 'The transition function under review'
-    : `The SAM v2 module under review (invariant predicates receive its
+export function buildInvariantsPrompt(contract, code, intent, { lang = 'javascript' } = {}) {
+  const machineNote = `The SAM v2 module under review (invariant predicates receive its
 getState() snapshot — a plain object with exactly the contract's state keys)`;
   return `Given the feature intent and the code below, propose
 invariants — rules encoding what the code SHOULD do (intent), independent of
@@ -390,43 +333,10 @@ nothing else (no prose).`;
  * determinism double-pass flag, so the repair sees WHY a window failed, not
  * only that it did.
  */
-export function buildRepairPrompt(contract, code, violation, { lang = 'javascript', mode = 'sam', triage = null } = {}) {
+export function buildRepairPrompt(contract, code, violation, { lang = 'javascript', triage = null } = {}) {
   const pathStr = violation.path
     .map((s, i) => (i === 0 ? 'init' : `${s.action}(${JSON.stringify(s.data)})`))
     .join(' -> ');
-  if (mode === 'legacy') {
-    return `The transition function below was model-checked (every reachable state
-from init(), explored exhaustively) against its own stated invariants. It
-reaches a state that VIOLATES one. Fix the CODE — the invariant is correct by
-definition; do not weaken or remove it.
-
-## Violated invariant
-
-**${violation.invariant}** [${violation.kind}] — ${violation.detail}
-
-Counterexample (shortest reachable path from init):
-${pathStr}
-
-## Current code
-
-\`\`\`${fenceFor(lang)}
-${code}
-\`\`\`
-
-## Observable state (EXACTLY these keys — unchanged)
-
-${renderStateKeys(contract)}
-
-## Special rules (apply ALL of these — do not omit any)
-
-${renderSpecialRules(contract)}
-
-## Output
-
-Output EXACTLY ONE fenced \`\`\`${fenceFor(lang)} code block containing the
-CORRECTED module (still \`module.exports = { init, next }\`), and nothing else
-(no prose).`;
-  }
   return `The SAM v2 strict-profile module below was model-checked (every
 reachable state from init(), explored exhaustively over its own declared
 intent domains) against its own stated invariants. It reaches a state that
@@ -504,13 +414,9 @@ CORRECTED module, and nothing else (no prose).`;
  * never explore whatever transition that value should gate — a coverage
  * collapse that looks like a clean "converged: true" for the wrong reason.
  */
-export function buildDomainGapRepairPrompt(contract, code, gaps, { lang = 'javascript', mode = 'sam' } = {}) {
-  const exportsLine = mode === 'legacy' ? 'module.exports = { init, next }' : V2_EXPORTS.replace(/;$/, '');
-  const rules = mode === 'legacy'
-    ? `## Special rules (apply ALL of these — do not omit any)
-
-${renderSpecialRules(contract)}`
-    : `## Special rules (REQUIRED reject(reason) cases — apply ALL, omit none)
+export function buildDomainGapRepairPrompt(contract, code, gaps, { lang = 'javascript' } = {}) {
+  const exportsLine = V2_EXPORTS.replace(/;$/, '');
+  const rules = `## Special rules (REQUIRED reject(reason) cases — apply ALL, omit none)
 
 ${renderSpecialRulesAsRejections(contract)}
 
@@ -555,10 +461,8 @@ COMPLETE corrected module (still \`${exportsLine}\`), and nothing else
  * generated machine to produce ground-truth NDJSON — the model never writes
  * the driver itself, only the action sequences.
  */
-export function buildScenariosPrompt(contract, code, { lang = 'javascript', mode = 'sam' } = {}) {
-  const noOpNote = mode === 'legacy'
-    ? 'no-op actions (an action that does not apply in the current state)'
-    : `no-op actions (an action the machine REJECTS in the current state —
+export function buildScenariosPrompt(contract, code, { lang = 'javascript' } = {}) {
+  const noOpNote = `no-op actions (an action the machine REJECTS in the current state —
 these replay as observable \`reject(reason)\` no-ops: post == pre)`;
   return `Given the state machine below, propose a set of named scenarios —
 sequences of (action, data) steps — that exercise it as a regression/demo trace

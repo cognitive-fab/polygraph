@@ -64,7 +64,8 @@ export function renderTerminalStates(contract) {
 // legacy renderers above read. No schema change: stateKeys/initState feed
 // modelShape, actions[].dataFields feed intent schemas, dataDomain feeds
 // intent domains, specialRules feed reject(reason) requirements. The legacy
-// renderers stay untouched (the --legacy-bare-next path still uses them).
+// renderers above are still used: the v2 template renders {state_keys},
+// {init_state} and {action_alphabet} from them.
 
 const V2_TYPES = ['string', 'number', 'boolean', 'object', 'array'];
 

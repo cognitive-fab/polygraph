@@ -1,6 +1,8 @@
-// {init, next} adapter over a v2 SAM strict-profile spec module — the bridge
-// that lets check.mjs's BFS engine (written against the bare-next contract)
-// explore a v2 module unchanged.
+// {init, transition} adapter over a v2 SAM strict-profile spec module — the
+// ONLY way into check.mjs's BFS engine. The transition relation is derived
+// mechanically from the module here; it is never hand-authored and is not an
+// artifact contract. (It was, once: the 1.x `next(state, action, data)`
+// module. That surface is gone — see CHANGELOG 8.0.0.)
 //
 // Adapted from SysMoBench's tools/js-sam/lean-adapter.cjs (verified unmodified
 // against v2 in E2-v2), with two deliberate differences:
@@ -13,22 +15,33 @@
 //     error-slot 'unexpected action' prefix as a compatibility fallback.
 //
 // Semantics:
-//   init()               -> spec.init(); return sanitized spec.getState()
-//   next(state, a, data) -> spec.init() (reset); clear error slot; spec.setState(state);
-//                           spec.actions[a](data); a REJECTED step returns the
-//                           INPUT state (a rejection is a legal, observable
-//                           no-op, not a fault); any other model-error content
-//                           or strict-profile throw propagates, so the checker
-//                           records it as a violation.
+//   init()                -> spec.init(); return sanitized spec.getState()
+//   step(state, i, data)  -> spec.init() (reset); clear error slot;
+//                           spec.setState(state); spec.actions[i](data);
+//                           returns { state, verdict, reason }:
+//                             verdict 'rejected' — the acceptor rejected; state
+//                               is the INPUT state (a rejection is a legal,
+//                               observable no-op, not a fault) and reason is
+//                               the acceptor's reject(reason), when readable.
+//                             verdict 'accepted' — state is the post snapshot.
+//                           Any other model-error content or strict-profile
+//                           throw propagates, so the checker records it as a
+//                           violation. step() is the full-fidelity surface:
+//                           the checker consumes it so rejection semantics
+//                           (verdict + reason) survive into exploration.
+//   transition(state, i, data) -> step(state, i, data).state — the bare
+//                           successor relation, for callers that only need
+//                           state' (polyrun audit/check-effects, polyvers
+//                           corpus, mutation wrappers).
 //
-// Purity: the checker treats next() as pure, so the model must be a function
+// Purity: the checker treats transition() as pure, so the model must be a function
 // of the INPUT SNAPSHOT alone. The library's setState is MERGE-ONLY (it
 // assigns keys present in the snapshot and never resets the rest) and
 // getState OMITS undefined-valued and `internal` modelShape keys — so a bare
 // setState(state) would leave residue from whatever transition ran last, and
-// BFS node identity would depend on traversal order. next() therefore resets
-// the instance via spec.init() FIRST and merges the snapshot on top: any key
-// outside the snapshot canonically holds its initial value (the same
+// BFS node identity would depend on traversal order. transition() therefore
+// resets the instance via spec.init() FIRST and merges the snapshot on top:
+// any key outside the snapshot canonically holds its initial value (the same
 // semantics sam-tv.mjs gives each replay window). Snapshots are re-serialized
 // with the __-key/function-stripping replacer so internal keys never leak
 // into the visited-state set. Async acceptors: generated specs declare
@@ -58,7 +71,7 @@ const sanitizeReplacer = (key, value) => {
   return value;
 };
 
-/** Build the {init, next} lean contract over a loaded v2 SAM module. */
+/** Build the {init, transition} lean relation over a loaded v2 SAM module. */
 function makeSamAdapter(spec) {
   if (!isSamV2Module(spec)) {
     throw new Error('makeSamAdapter: module does not export the v2 SAM surface { instance, init, actions, getState, setState }');
@@ -108,7 +121,7 @@ function makeSamAdapter(spec) {
     return snapshot();
   };
 
-  const next = (state, action, data) => {
+  const step = (state, action, data) => {
     // Reset-then-merge: without init(), setState's merge-only semantics let
     // hidden state leak between transitions and node identity becomes
     // traversal-order-dependent (states wrongly merged or missed).
@@ -124,8 +137,8 @@ function makeSamAdapter(spec) {
       throw new Error(`action '${action}' is not exported by the spec`);
     }
     handler(data);
-    const step = lastStepOf(action);
-    if (step && step.classification === 'rejected') {
+    const last = lastStepOf(action);
+    if (last && last.classification === 'rejected') {
       // lastStep() classifies 'rejected' whenever reject() was called — even
       // if the acceptor mutated the model FIRST. Treating that as a pure
       // no-op would explore an identity transition the replayer (which reads
@@ -139,31 +152,37 @@ function makeSamAdapter(spec) {
       // defect through. (`internal`-key writes stay invisible to snapshot()
       // and to the replayer alike, so they still pass here, as they should.)
       if (JSON.stringify(snapshot()) !== JSON.stringify(entry)) {
-        const what = Array.isArray(step.mutations) && step.mutations.length > 0
-          ? step.mutations.join(', ')
+        const what = Array.isArray(last.mutations) && last.mutations.length > 0
+          ? last.mutations.join(', ')
           : 'deep/nested write through the frozen pre-state';
         throw new Error(`acceptor for '${action}' mutated the observable model (${what}) and then rejected — a rejection must be an observable no-op`);
       }
-      return state; // legal, observable no-op
+      // Legal, observable no-op — carry the acceptor's stated reason so the
+      // checker can verify rejection OBLIGATIONS, not just post == pre.
+      const rejection = Array.isArray(last.rejections) && last.rejections.length ? last.rejections[0] : null;
+      return { state, verdict: 'rejected', reason: rejection && rejection.reason !== undefined ? rejection.reason : null };
     }
     const modelError = readModelError();
     if (modelError) {
       clearError();
-      if (modelError.isRejection) return state; // v1-style gated no-op
+      if (modelError.isRejection) return { state, verdict: 'rejected', reason: null }; // v1-style gated no-op
       throw new Error(`action raised: ${modelError.message}`);
     }
-    return snapshot();
+    return { state: snapshot(), verdict: 'accepted', reason: null };
   };
 
-  return { init, next };
+  const transition = (state, action, data) => step(state, action, data).state;
+
+  return { init, step, transition };
 }
 
 /**
  * Read the (action, data) exploration domain off instance({}).manifest() —
- * the v2 replacement for buildDomain()'s contract/trace inference: what the
- * spec DECLARES is what gets explored, so an action can never be silently
- * excluded by missing inference. Returns { steps:[{action,data}], notes:[] }
- * (the same shape as buildDomain, so check.mjs consumes either).
+ * what the spec DECLARES is what gets explored, so an action can never be
+ * silently excluded by missing inference. (The 1.x pipeline inferred this
+ * domain from the contract and the trace corpus instead; that inference is
+ * gone with the bare-next artifact it served.) Returns
+ * { steps:[{action,data}], notes:[], intentNames:[] }.
  *
  * Domain entries (per the v2 contract): a function is a generator evaluated
  * now; an array is spread as intent arguments — the pipeline's window contract

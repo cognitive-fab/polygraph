@@ -20,5 +20,6 @@ node scripts/verify.mjs \
 
 All 12 windows replay consistent; the three PUSH-while-LOCKED windows carry
 `classification: "rejected"` with the contract-anchored `rejectionReason` —
-the triage evidence the legacy bare-next replayer could never produce.
-(`--legacy-bare-next` selects the old bare-next path; see `examples/turnstile`.)
+the triage evidence the 1.x bare-next replayer could never produce. (That
+artifact, and the `examples/turnstile` that carried it, were removed in
+8.0.0.)

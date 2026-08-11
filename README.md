@@ -96,16 +96,43 @@ comes from a project that is **ahead of Polygraph on the one axis the two
 share**:
 
 > **Specula: Scaling formal specifications for autonomous model checking of
-> system code.** arXiv:2607.25333, July 2026.
+> system code.** arXiv:2607.25333v2, August 2026.
 > <https://github.com/specula-org/Specula> (Apache-2.0)
 
 Specula is an agentic TLA+ pipeline standing on the same three legs Polygraph
 does — spec generation, model checking, trace validation. Its paper reports
 **249 bugs across 48 projects** (MongoDB, Etcd, ScyllaDB, GCC libgomp, LLVM
-libomp), 207 previously unknown, 68 confirmed and 24 fixed upstream, at a
-median of $57 and 3.7 hours per system. The convergent finding is the one
-that matters: the LLM alone is not trustworthy, but an LLM *held accountable
-by a model checker and trace validation* is a practical bug-finder.
+libomp) in seven languages and 2K–95K LoC: 207 previously unknown, 89
+reported upstream, 68 confirmed and 24 fixed, at a median of $57 and 3.7
+hours per system. 200 of the 249 surfaced through model checking; the rest
+came out of code comprehension along the way. The convergent finding is the
+one that matters: the LLM alone is not trustworthy, but an LLM *held
+accountable by a model checker and trace validation* is a practical
+bug-finder.
+
+**On coverage, the two are closer than the languages suggest.** It is
+tempting to read this as rigorous-TLA+ versus pragmatic-JS. That is not
+where the difference lies. Specula builds a *reference model* of the system
+at whatever abstraction its invariants require, then **projects** that model
+into smaller scenario models — bounding how often an action can occur,
+collapsing a multi-step protocol into one atomic step, forcing an ordering.
+The projection is sound in the direction that matters: a violation found in
+a projection is a violation in the reference model. Polygraph enumerates a
+finite (action, data) domain declared in the contract and visits every state
+reachable over it. **Both make an unbounded space tractable by declaring an
+abstraction, then search what is left close to exhaustively** — 93.5% of
+Specula's model-checked bugs fall out of plain breadth-first search, at a
+median counterexample of 9 steps. And neither measures the distance between
+the declared abstraction and the real system. Their paper says so plainly:
+
+> "there is no formal guarantee that it models everything perfectly… A model
+> can therefore remain inconsistent with the implementation in ways we did
+> not catch, and a bug that depends on such a gap can remain undetected."
+
+That is the same caveat we give in
+[What "exhaustive" means](#what-exhaustive-means--and-what-it-doesnt), from
+a project with 249 bugs behind it. Read it as the shape of the field, not
+as either project's weakness.
 
 Where Specula is ahead of Polygraph's audit engine, plainly:
 
@@ -115,28 +142,45 @@ Where Specula is ahead of Polygraph's audit engine, plainly:
   the agent per run (Step 2 of the skill), so the harness is not by default a
   committed, re-runnable artifact.
 - **It reproduces bugs in the running system**, forcing the counterexample
-  schedule at code level and assessing consequence. Polygraph stops at a
-  spec-level counterexample path.
-- **It triages.** 48.8% of its model-level violations were discharged as
-  *masked* — real invariant breaks with no observable consequence. Polygraph
-  hands you all of them as leads to check by hand.
-- **It has third-party confirmation.** Upstream maintainers fixed 24 of its
-  findings. Polygraph has one corroborated production bug and a seeded-bug
-  eval.
+  schedule at code level and assessing consequence — 98% of the violations
+  it judges real, with reproduction a gate rather than an attempt. Polygraph
+  stops at a spec-level counterexample path.
+- **It guards its own repairs.** When a spec is repaired to pass trace
+  validation, the repaired model is model-checked against *protocol-level*
+  invariants — catching repairs that bought conformance by admitting illegal
+  behavior. Polygraph's positive/negative controls prove the harness can
+  tell a good spec from a mutated one; that is a check on the instrument,
+  not on each repair. Different points, and we only have the one.
+- **It triages, and publishes the split.** Of the violations that reach
+  reproduction: 47.5% confirmed as real bugs, 48.8% discharged as *masked*
+  with evidence — real invariant breaks with no observable consequence — and
+  1.0% left unreproducible. Polygraph hands you all of them as leads to
+  check by hand.
+- **It has third-party confirmation.** Upstream maintainers confirmed 68 of
+  its 89 reported findings and fixed 24. Polygraph has one corroborated
+  production bug and a seeded-bug eval.
 - **It requires invariants to cite their evidence** — a commit, code
-  location, or issue. polynv harvests candidates but does not demand
+  location, issue, or advisory, and it reports the distribution (code and
+  comments back 87% of its invariants, issue trackers and pull requests
+  74%, commit history 43%). polynv harvests candidates but does not demand
   provenance.
+- **It is agent-agnostic.** Adapters ship for Claude Code, Codex, Copilot
+  CLI, OpenCode and Pi, and any phase can be routed to a different agent or
+  model. Polygraph's generation steps shell out to `ANTHROPIC_API_KEY`.
 
 The difference is not that Polygraph audits better. It is that auditing is
 one engine of several here, and Specula has **no authoring, no CI gate, no
 runtime, and no versioning** — its paper states specs are generated from a
-snapshot and must be regenerated when the code changes. At $57 and 3.7 hours
-per system it structurally cannot run on every merge request; Polygraph's
-model check and replay are keyless and deterministic, which is what makes
-`polygate` possible. Different bet, different slot. If your problem is deep
-bugs in a large concurrent or distributed system written in C, C++, Go, Rust,
-Java, or Erlang, **use Specula** — that is what it is for, and it is good at
-it.
+snapshot and must be regenerated when the code changes. Its evaluation ran
+on a 96-core, 384 GB machine driving Opus-4.8 at 1M context and maximum
+reasoning; a single CometBFT module took 670 agent steps and 1.9 billion
+generated states. At a median of $57 and 3.7 hours per system — 5–37× the
+token cost of an unaided agent — it structurally cannot run on every merge
+request; Polygraph's model check and replay are keyless and deterministic,
+which is what makes `polygate` possible. Different bet, different slot. If
+your problem is deep bugs in a large concurrent or distributed system
+written in C, C#, C++, Erlang, Go, Java, or Rust, **use Specula** — that is
+what it is for, and it is good at it.
 
 > **The five engines** share one artifact family, so what one produces the
 > next can consume: **Polygraph** audits (this document), **polygen**
@@ -480,15 +524,30 @@ checker errors back.
 | `opus-4.8` | `claude-opus-4-8` | previous recommendation; still strong — and the refusal fallback (see below) |
 | `sonnet-5` | `claude-sonnet-5` | available, but underpowered for spec derivation — not recommended |
 
+The model-tier claim is not only ours. Specula (above) ran its identical
+pipeline across three tiers on the same five systems and found **62 bugs
+with Opus-4.8, 10 with Sonnet-4.6, and 0 with Haiku-4.5** — the middle tier
+spending 61% of the budget to find a sixth as many bugs, at roughly $59 per
+bug against $16. The failure mode they report is the one worth internalizing,
+because it is not "weaker model writes worse specs": under Sonnet-4.6, 39
+false findings reached the reproduction phase, and on six of them the agent
+**hacked its own reproduction by injecting illegal state directly into the
+running system** — explicitly forbidden by its instructions. Opus-4.8, same
+instructions, did it zero times. A deterministic harness only constrains a
+model that is still following it. Different specification language, different
+pipeline, different systems, same conclusion.
+
 `opus-5` measured on the 8-machine A/B (`eval/ab-v2.mjs`, 2026-07-24, n=3):
 5/5 seeded bugs detected, 0 false alarms, 0 dead specs — all five detections at
 the model-check tier rather than the cheaper replay tier, so budget for the
-exhaustive pass. One caveat, seen only on the legacy bare-next prompt: the API
-refused two of the eight machines (`stop_reason: refusal`, `category: cyber`)
-because their source comments describe a payment-guard bypass. `opus-4.8` and
-`sonnet-5` did not refuse the same input, and the default v2 prompt was
-unaffected — but if a refusal costs you a run, that is the fallback to reach
-for.
+exhaustive pass. One caveat, seen on the since-removed bare-next prompt: the API
+refused two of the eight machines (`stop_reason: refusal`, `category: cyber`).
+What tripped the classifier was the *source comments* — they describe a
+payment-guard bypass — not the task, which was deriving a transition-function
+spec. It is a false positive on benign verification work, which is why
+switching models is a real fix and not a lucky roll: `opus-4.8` and `sonnet-5`
+did not refuse the same input, and the default v2 prompt was unaffected. If a
+refusal costs you a run, `opus-4.8` is the fallback to reach for.
 
 Anything not in the alias table (`scripts/models.mjs`) is passed to the API
 verbatim, so an exact Anthropic model id always works. Reasoning models spend
@@ -574,8 +633,13 @@ captured from the running system. Three things worth stating plainly:
   should not be read as one.
 - **Specula reports 100% on all four phases** (syntax, runtime correctness,
   conformance, invariant satisfaction), against 81–82% for unaided agent
-  baselines. That is the number to beat, and we have not beaten it. In
-  fairness to the reader on both sides of the ledger: SysMoBench and Specula
+  baselines. That is the number to beat, and we have not beaten it. Two
+  qualifications, both from their own paper: the benchmark requires
+  human-verified invariants as input, so their team wrote those by hand —
+  the 100% grades the generated *model*, not the pipeline end to end. And
+  the score is a function of the model driving it: 100% on Opus-4.8, 93% on
+  Sonnet-4.6, 47% on Haiku-4.5. The tier spread says more than the headline
+  figure. In fairness to the reader on both sides of the ledger: SysMoBench and Specula
   share eight of Specula's nine authors, so that figure is a self-evaluation
   on the team's own benchmark — just as `SysMoBench-1` below is our own fork.
   Neither fact is disqualifying; both should be visible.
@@ -586,7 +650,11 @@ captured from the running system. Three things worth stating plainly:
   fidelity — JavaScript in the shape of the TLA+ transition relation is as
   faithful as TLA+. Both projects converge on the same place from opposite
   directions; Specula got there with an agentic repair loop, we got there by
-  constraining the contract.
+  constraining the contract. Their own benchmark run points the same way
+  from the other side: giving an agent the official TLA+ toolchain moves the
+  overall score from 81% to 82%, and they conclude that "what is lacking is
+  not TLA+ knowledge but the runtime feedback that helps the agents to repair
+  and revise the models."
 
 <https://github.com/jdubray/SysMoBench-1> is **our own fork**, not an
 independent evaluation of Polygraph.
@@ -600,17 +668,21 @@ trace validation is what makes LLM-generated specs trustworthy.
 If you use Polygraph in your work, please cite the paper (see `CITATION.cff`).
 
 <details>
-<summary>Legacy 1.x artifact (<code>--legacy-bare-next</code>)</summary>
+<summary>Legacy 1.x artifact (removed in 8.0.0)</summary>
 
 Polygraph 1.x derived a bare `next(state, action, data)` function instead of
-the strict SAM v2 module. That pipeline remains available end-to-end behind
-`--legacy-bare-next` for one release (`npm run test:legacy`,
-`npm run verify:turnstile`). The v2 strict profile replaced it because it
-closes whole failure classes by construction — silent no-op specs, hidden
-bookkeeping state, vacuous exploration — while the N-spec voting layer absorbs
-what v2 gives up. The one discipline sentence the study showed carried
-bare-next's replay robustness is kept verbatim in the v2 prompts. (The repo's
-historical disk name, `bare-next-verify`, records this lineage.)
+the strict SAM v2 module. **That artifact was removed in 8.0.0** — there is no
+flag to bring it back. The prompt builder, the replayer, the model checker and
+the mutation control each refuse it by name. The v2 strict profile replaced it
+because it closes whole failure classes by construction — silent no-op specs,
+hidden bookkeeping state, vacuous exploration — while the N-spec voting layer
+absorbs what v2 gives up. The one discipline sentence the study showed carried
+bare-next's replay robustness is kept verbatim in the v2 prompts.
+
+The checker still iterates a transition relation, as any model checker must —
+but it is derived mechanically from the SAM module by `scripts/sam-adapter.cjs`
+(`{ init, transition }`) and is never hand-authored. (The repo's historical
+disk name, `bare-next-verify`, records the older lineage.)
 
 </details>
 

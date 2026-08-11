@@ -76,6 +76,11 @@ export async function loadArtifacts(dir) {
     contractHash: sha256(contractBytes),
     moduleHash: sha256(moduleBytes),
     module,
+    // Source + path travel with the artifact (additive, 8.0): polynv's
+    // schema-weaken mutation family rewrites the module SOURCE and reloads —
+    // wrap-level mutation cannot reach a schema declaration.
+    modulePath,
+    moduleSource: moduleBytes.toString('utf-8'),
   };
 
   const invariantsPath = join(abs, 'invariants.mjs');
@@ -89,10 +94,11 @@ export async function loadArtifacts(dir) {
     const mod = await import(`${pathToFileURL(invariantsPath).href}?h=${out.invariantsHash}`);
     out.invariants = mod.stateInvariants ?? mod.invariants ?? [];
     out.transitionInvariants = mod.transitionInvariants ?? [];
+    out.rejectionInvariants = mod.rejectionInvariants ?? [];
     // A present-but-empty intent artifact must fail loudly, not gate
     // vacuously: a renamed export (default export, a typo) would otherwise
     // yield zero predicates and a green invariants-pointwise over 0 checks.
-    if (out.invariants.length === 0 && out.transitionInvariants.length === 0) {
+    if (out.invariants.length === 0 && out.transitionInvariants.length === 0 && out.rejectionInvariants.length === 0) {
       throw new Error(`'${invariantsPath}' exports no invariants — expected stateInvariants (and/or transitionInvariants) arrays of {name, pred}; refusing to gate vacuously against an empty intent artifact`);
     }
   }
@@ -171,5 +177,6 @@ export function invariantsOf(artifacts) {
   return {
     stateInvariants: artifacts.invariants ?? [],
     transitionInvariants: artifacts.transitionInvariants ?? [],
+    rejectionInvariants: artifacts.rejectionInvariants ?? [],
   };
 }

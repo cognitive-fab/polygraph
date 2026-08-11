@@ -1,10 +1,9 @@
 // Shared spec-loading + canonical-state helpers.
 //
 // ONE loader and ONE canonical stringify for the whole pipeline, so the replay
-// half (tv.mjs / sam-tv.mjs) and the model-checking half (check.mjs) can never
-// disagree about which specs load or which states are equal. tv.mjs and
-// sam-tv.mjs (standalone child processes) import the loader from here — the
-// former internal copy in tv.mjs was consolidated away.
+// half (sam-tv.mjs) and the model-checking half (check.mjs) can never
+// disagree about which specs load or which states are equal. sam-tv.mjs (a
+// standalone child process) imports the loader from here.
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
@@ -13,7 +12,7 @@ import vm from 'node:vm';
 import { SAM_LIB_PATH, SAM_LIB_SPECIFIERS } from './sam-lib.mjs';
 
 // Specs may console.log (LLM output often appends demo logging). Any stdout
-// write from a spec would corrupt tv.mjs's stdout JSON protocol, so the loader
+// write from a spec would corrupt sam-tv.mjs's stdout JSON protocol, so the loader
 // shadows `console` with a stderr-backed one via a compileFunction parameter —
 // this covers module top-level logging AND calls inside init()/next(), because
 // the parameter shadows the global for all code in the module.

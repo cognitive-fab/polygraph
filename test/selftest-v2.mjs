@@ -181,12 +181,13 @@ ok('strict schema violation -> fail with the error name in the result',
   gateResp.ok === true && gateResp.results[0].status === 'fail' && /SamSchemaError/.test(gateResp.results[0].error));
 ok('well-formed payload on the same spec passes', gateResp.results[1].status === 'pass');
 
-// Mode mismatches are LOUD, never silently clean.
-const legacyThroughSam = replaySpecResults(join(ROOT, 'examples', 'turnstile', 'specs', 'reference.js'), windows, 'sam');
-ok('legacy bare-next spec through the sam replayer -> ok:false naming the fix',
-  legacyThroughSam.ok === false && /legacy/.test(legacyThroughSam.error));
-ok('v2 spec through the LEGACY replayer -> unscoreable (no next())',
-  replaySpec(V2_SPEC, windows, 'legacy').every((s) => s === 'unscoreable'));
+// A non-v2 module through the replayer is LOUD, never silently clean. (The
+// 1.x bare-next artifact is removed; this pins that one cannot sneak back in.)
+const bareNextSpec = join(TMP, 'bare-next.cjs');
+writeFileSync(bareNextSpec, "module.exports = { init: () => ({ state: 'LOCKED', coins: 0 }), next: (s) => s };", 'utf-8');
+const bareThroughSam = replaySpecResults(bareNextSpec, windows);
+ok('a bare-next module through the replayer -> ok:false naming the fix',
+  bareThroughSam.ok === false && /legacy|next\(\)/.test(bareThroughSam.error));
 
 console.log('3) P4 — checker drives the v2 module via the adapter + manifest() domains');
 const invariants = {
@@ -225,14 +226,20 @@ ok('counterexample is the shortest path (init + 3x COIN)',
 ok('rejections explored as legal no-ops (PUSH@LOCKED did not throw)',
   !buggy.violations.some((v) => v.kind === 'throw'));
 
-const legacyCheck = check({
+// A bare-next module is REFUSED by the checker, with the artifact named.
+const bareNextCheck = check({
   specModule: { init: () => ({ n: 0 }), next: (s, a) => (a === 'TICK' ? { n: s.n + 1 } : s) },
   contract: { stateKeys: ['n'], actions: { TICK: { dataFields: {} } } }, invariants: {}, maxStates: 5,
 });
-ok('legacy {init,next} module still uses the legacy engine + buildDomain', legacyCheck.engine === 'legacy');
-const forcedLegacy = check({ specModule: loadSpec(V2_SPEC), contract, invariants, maxStates: 40, legacyBareNext: true });
-ok('--legacy-bare-next forces the bare-next path even on a v2 module (loud error, no silent clean)',
-  forcedLegacy.ok === false && /init\(\) and next\(\)/.test(forcedLegacy.error));
+ok('a bare next(state, action, data) module is refused, never explored',
+  bareNextCheck.ok === false && /bare next/.test(bareNextCheck.error) && bareNextCheck.engine === null);
+// An already-adapted relation is admitted ONLY with an explicit steps domain.
+const adaptedNoSteps = check({
+  specModule: { init: () => ({ n: 0 }), transition: (s) => s },
+  contract: {}, invariants: {}, maxStates: 5,
+});
+ok('an adapted {init, transition} relation without a steps domain is refused',
+  adaptedNoSteps.ok === false && /explicit `steps` domain/.test(adaptedNoSteps.error));
 
 // Empty exploration domains are ERRORS, never vacuous passes.
 const noIntentsSpec = join(TMP, 'no-intents-v2.js');
@@ -246,12 +253,12 @@ ${V2_FOOTER}`, 'utf-8');
 const noIntents = check({ specModule: loadSpec(noIntentsSpec), contract, invariants, maxStates: 40 });
 ok('v2 module with an empty intent registry is an ERROR, not a vacuous clean',
   noIntents.ok === false && typeof noIntents.error === 'string' && noIntents.violations.length === 0);
-const emptyLegacy = check({
-  specModule: { init: () => ({ n: 0 }), next: (s) => s },
-  contract: { stateKeys: ['n'], actions: {} }, invariants: {}, maxStates: 5,
+const emptySteps = check({
+  specModule: { init: () => ({ n: 0 }), transition: (s) => s },
+  contract: {}, invariants: {}, maxStates: 5, steps: [],
 });
-ok('legacy contract with zero explorable actions is an ERROR (empty domain)',
-  emptyLegacy.ok === false && /exploration domain is empty/.test(emptyLegacy.error));
+ok('an empty steps domain is an ERROR, never a vacuous clean',
+  emptySteps.ok === false && /explicit `steps` domain|exploration domain is empty/.test(emptySteps.error));
 // A contract action the manifest doesn't know about must be VISIBLE.
 const extraActionContract = { ...contract, actions: { ...contract.actions, MYSTERY: { dataFields: {} } } };
 const diffed = check({ specModule: loadSpec(V2_SPEC), contract: extraActionContract, invariants, maxStates: 40 });
@@ -278,9 +285,9 @@ ${V2_FOOTER}`, 'utf-8');
   const samAdapter = (await import('../scripts/sam-adapter.cjs')).default;
   const adapted = samAdapter.makeSamAdapter(loadSpec(hiddenSpec));
   adapted.init();
-  const first = adapted.next({ state: 'COLD' }, 'BUMP', {});
-  const second = adapted.next({ state: 'COLD' }, 'BUMP', {});
-  ok('adapter next() is pure: same input state gives the same output regardless of history',
+  const first = adapted.transition({ state: 'COLD' }, 'BUMP', {});
+  const second = adapted.transition({ state: 'COLD' }, 'BUMP', {});
+  ok('adapter transition() is pure: same input state gives the same output regardless of history',
     JSON.stringify(first) === JSON.stringify(second));
   ok('hidden internal state is canonically reset (init-value semantics, same as sam-tv per-window)',
     first.state === 'WARM');
@@ -343,6 +350,72 @@ const internalReject = check({ specModule: loadSpec(internalRejectSpec), contrac
 ok('write-then-reject in the same acceptor is a hard error under 2.2 (#36), surfaced as a throw finding',
   internalReject.violations.some((v) => v.kind === 'throw' && /reject\(\) after next-state writes/.test(v.detail)));
 
+
+console.log("3b) rejection semantics survive into the checker (SAM-v2 audit #1)");
+{
+  const samAdapterMod = (await import('../scripts/sam-adapter.cjs')).default;
+  const a = samAdapterMod.makeSamAdapter(loadSpec(V2_SPEC));
+  const i0 = a.init();
+  const rej = a.step(i0, 'PUSH', {});
+  ok("adapter step(): a rejection carries verdict AND the acceptor's reason",
+    rej.verdict === 'rejected' && rej.reason === 'push-while-locked-is-noop'
+    && JSON.stringify(rej.state) === JSON.stringify(i0));
+  const acc = a.step(i0, 'COIN', {});
+  ok('adapter step(): an accepted step carries the post snapshot',
+    acc.verdict === 'accepted' && acc.state.state === 'UNLOCKED');
+  ok('adapter transition() is the projection of step() onto state',
+    JSON.stringify(a.transition(i0, 'COIN', {})) === JSON.stringify(acc.state));
+
+  // A rejection OBLIGATION — unstatable under bare-next (post == pre is the
+  // weaker claim a silently no-oping acceptor also satisfies).
+  const rejObligation = {
+    rejectionInvariants: [{
+      name: 'push-locked-must-reject',
+      pred: (s, action, d, v) => !(action === 'PUSH' && s.state === 'LOCKED')
+        || (v && v.rejected && v.reason === 'push-while-locked-is-noop'),
+    }],
+  };
+  const goodRej = check({ specModule: loadSpec(V2_SPEC), contract, invariants: rejObligation, maxStates: 40 });
+  ok('rejection invariant HOLDS on the reference (obligation met with the declared reason)',
+    goodRej.ok === true);
+  ok('rejection coverage: the declared special rule fires over the explored graph',
+    goodRej.rejectionReport && goodRej.rejectionReport.fired['push-while-locked-is-noop'] > 0
+    && goodRej.rejectionReport.missing.length === 0);
+  const mutantPath = join(ROOT, 'examples', 'turnstile-v2', 'specs-mutant', 'mutant.js');
+  const badRej = check({ specModule: loadSpec(mutantPath), contract, invariants: rejObligation, maxStates: 40 });
+  ok("rejection invariant VIOLATED by the mutant (accepts what must be rejected), kind 'rejection'",
+    badRej.ok === false && badRej.violations.some((v) => v.kind === 'rejection' && v.invariant === 'push-locked-must-reject'));
+  ok('rejection coverage: the mutant reports the declared rule as never firing',
+    badRej.rejectionReport && badRej.rejectionReport.missing.includes('push-while-locked-is-noop'));
+  // Verdicts are unavailable on a bare relation — obligations must refuse, not
+  // pass vacuously.
+  const relRej = check({
+    specModule: { init: () => ({ n: 0 }), transition: (s) => s },
+    contract: {}, invariants: rejObligation, maxStates: 5, steps: [{ action: 'TICK', data: {} }],
+  });
+  ok('rejectionInvariants over a bare relation are refused loudly (no vacuous pass)',
+    relRej.ok === false && /rejectionInvariants need step\(\) verdicts/.test(relRej.error));
+
+  // #2: internal modelShape keys are noted as structurally unexplored.
+  const internalNote = check({ specModule: loadSpec(hiddenSpec), contract: {}, invariants: {}, maxStates: 10 });
+  ok("internal modelShape key surfaces in its OWN field (never domainNotes — polygen reads those as a pruned alphabet)",
+    (internalNote.internalKeys || []).includes('hits') && (internalNote.domainNotes || []).every((n) => !/internal modelShape key/.test(n)));
+
+  // #4: reactor-owned (derived) state is refused by the checker...
+  const derivedSpec = join(TMP, 'derived-v2.js');
+  writeFileSync(derivedSpec, readFileSync(V2_SPEC, 'utf-8').replace(
+    "coins: { type: 'number' }", "coins: { type: 'number', derived: true }"), 'utf-8');
+  const derivedRes = check({ specModule: loadSpec(derivedSpec), contract, invariants: {}, maxStates: 10 });
+  ok('derived (reactor-owned) modelShape key is refused by the checker',
+    derivedRes.ok === false && /derived: true/.test(derivedRes.error) && /reactors: \[\]/.test(derivedRes.error));
+  // ...and by polygen's stage-boundary gate.
+  const { validateV2Module } = await import('../scripts/polygen.mjs');
+  let derivedThrew = null;
+  try { validateV2Module(loadSpec(derivedSpec)); } catch (e) { derivedThrew = e.message; }
+  ok("polygen's validate gate refuses derived keys stage-blocking",
+    derivedThrew !== null && /derived: true/.test(derivedThrew));
+}
+
 console.log('4) P4 — determinism double-pass');
 const rand = check({ specModule: loadSpec(randomSpec), contract: {}, invariants: {}, maxStates: 30 });
 ok('Math.random spec flagged nondeterministic', rand.nondeterministic === true);
@@ -354,15 +427,13 @@ const e2e = await verify({ contract: join(EX, 'contract.json'), traces: join(EX,
 ok('verify (sam mode): 12/12 windows consistent', e2e.summary.consistent === 12 && e2e.summary.specs === 1);
 ok('no dead specs', e2e.summary.deadSpecs.length === 0);
 
-// CLI flag threading: --legacy-bare-next is a boolean flag selecting tv.mjs end-to-end.
-const cli = spawnSync('node', [join(ROOT, 'scripts', 'verify.mjs'),
-  '--contract', join(ROOT, 'examples', 'turnstile', 'contract.json'),
-  '--traces', join(ROOT, 'examples', 'turnstile', 'traces'),
-  '--specs', join(ROOT, 'examples', 'turnstile', 'specs'),
-  '--legacy-bare-next',
-  '--out', join(TMP, 'out-legacy-cli')], { encoding: 'utf-8' });
-ok('CLI --legacy-bare-next replays the legacy example clean (12/12)',
-  cli.status === 0 && /12\/12 windows consistent/.test(cli.stdout));
+// CLI: the removed flag must be a LOUD usage error, not silently accepted.
+const cliRemoved = spawnSync('node', [join(ROOT, 'scripts', 'verify.mjs'),
+  '--contract', join(EX, 'contract.json'), '--traces', join(EX, 'traces'),
+  '--specs', join(EX, 'specs'), '--legacy-bare-next',
+  '--out', join(TMP, 'out-removed-flag')], { encoding: 'utf-8' });
+ok('CLI: the removed --legacy-bare-next flag exits non-zero (never silently ignored)',
+  cliRemoved.status !== 0);
 
 // CLI arg hardening: a value flag followed by another flag must be a loud
 // usage error, not a silent `Number(true) === 1`.

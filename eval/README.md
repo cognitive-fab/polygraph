@@ -69,7 +69,7 @@ task regresses.
 npm run eval:mechanism            # free, deterministic — validates the suite
 node eval/skill-ab.mjs --dry-run  # free — validates the A/B scoring with mocked fetch
 ANTHROPIC_API_KEY=... node eval/skill-ab.mjs --model <id> --n 3   # the real A/B
-# artifact A/B (P8 ship gate): legacy bare-next vs v2 SAM strict, both arms:
+# model A/B over the v2 SAM strict artifact (the legacy arm was removed in 8.0.0):
 ANTHROPIC_API_KEY=... node eval/ab-v2.mjs --model haiku-4.5 [--machines m01-m04]
 node eval/ab-v2.mjs --reference   # degraded replay-only mode (no key)
 ```

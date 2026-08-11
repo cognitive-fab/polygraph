@@ -128,7 +128,7 @@ export function synthesizeCorpus(oldModule, { maxStates = 20000 } = {}) {
       const sJson = JSON.stringify(s); // hoisted: one stringify per state, one parse per step
       for (const { action, data } of steps) {
         let post;
-        try { post = mod.next(JSON.parse(sJson), action, data); }
+        try { post = mod.transition(JSON.parse(sJson), action, data); }
         catch (e) {
           // A throwing combo narrows the corpus, it must not abort it — the
           // machines this tool exists to protect are exactly the imperfect

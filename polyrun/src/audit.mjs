@@ -51,7 +51,7 @@ export async function auditMachine({ runtime, machineId, sinceMs = 0, instanceId
         windowsReplayed += 1;
         let replayed;
         try {
-          replayed = adapter.next(row.pre, row.action, row.data);
+          replayed = adapter.transition(row.pre, row.action, row.data);
         } catch (err) {
           mismatches.push({ instanceId: inst.instance_id, seq: row.seq, action: row.action, kind: 'replay-threw', detail: err.message });
           continue;
@@ -68,7 +68,7 @@ export async function auditMachine({ runtime, machineId, sinceMs = 0, instanceId
         // under replay). A module that now ACCEPTS it has drifted too.
         windowsReplayed += 1;
         try {
-          const replayed = adapter.next(row.pre, row.action, row.data);
+          const replayed = adapter.transition(row.pre, row.action, row.data);
           if (stable(replayed) !== stable(row.pre)) {
             mismatches.push({
               instanceId: inst.instance_id, seq: row.seq, action: row.action,
@@ -91,7 +91,7 @@ export async function auditMachine({ runtime, machineId, sinceMs = 0, instanceId
         // that now transitions on it has drifted.
         windowsReplayed += 1;
         try {
-          const replayed = adapter.next(row.pre, row.action, row.data);
+          const replayed = adapter.transition(row.pre, row.action, row.data);
           if (stable(replayed) !== stable(row.pre)) {
             mismatches.push({
               instanceId: inst.instance_id, seq: row.seq, action: row.action,
