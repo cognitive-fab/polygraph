@@ -197,3 +197,29 @@ moved `opus-4.8` → `opus-5` in 6.2.1 on the strength of this run.
 ANTHROPIC_API_KEY=… node eval/ab-v2.mjs --model claude-opus-5 --n 3
 # (the opus-5 alias also works as of 6.2.1)
 ```
+
+
+## 8.0.0 rerun: Opus 5, N=3, all 8 machines, v2 arm only (2026-08-11)
+
+The bare-next artifact (and with it the legacy arm) was removed in 8.0.0;
+this rerun gates the removal branch against the recorded Opus 5 baseline
+above. Same model (`claude-opus-5`), same N, same machines, same prompts —
+the v2 generation path is byte-identical; what changed underneath is the
+checker (verdict-carrying adapter, rejection semantics, admission gates).
+
+| measure | recorded baseline (v2 arm) | 8.0.0 rerun | verdict |
+|---|---|---|---|
+| generations | refusal-free on v2 | **24/24** (3/3 × 8) | ✅ |
+| dead specs | 0 | **0** | ✅ |
+| seeded detection (m01–m05) | 5/5, all at the check tier | **5/5, all at the check tier** (replay=- on all five — the faithful-reproduction finding reproduces) | **parity** ✅ |
+| false alarms (m06, m07 clean) | 0 | **0** | ✅ |
+| m08 (out-of-scope boundary) | clean | **clean** | ✅ |
+| rejection-reason triage on generated specs | n/a (assertion added in 8.0.0) | **8/8 machines** | new signal ✅ |
+| determinism double-pass | ran on all | **ran on all, 0 nondeterministic** | ✅ |
+| refusals | legacy prompt only (that prompt is deleted) | **none** — the refusal surface left with the artifact | ✅ |
+
+**Verdict: parity at the release model, on every recorded measure.** The
+removal branch detects everything the baseline detected, at the same tier,
+with the same silence on the clean and out-of-scope machines — and the
+generated specs now carry the rejection-reason classifications the legacy
+artifact could not express.
