@@ -19,10 +19,10 @@
 // Results stream to eval/results/ab-v2-scorecard.json after every machine, so
 // a run killed mid-way (expired key) keeps its partial results.
 //
-// Degraded mode (--reference) is UNAVAILABLE until the eight machines'
-// reference specs are ported to SAM v2 — they are 1.x bare-next artifacts,
-// which the pipeline no longer admits. Historically: --reference replayed each
-// machine's checked-in reference spec instead of generating. reference.cjs is
+// Degraded mode (no API key / key expired): --reference replays each
+// machine's checked-in reference spec instead of generating. Since 8.0.0 the
+// references are SAM v2 strict-profile ports of the 1.x bare-next originals
+// (transition-table-identical, proven before the swap). reference.cjs is
 // a bare-next artifact, so only the LEGACY arm can run this way; the v2 arm
 // is recorded as BLOCKED (no v2 reference specs exist per machine). The two
 // v2-only pipeline assertions are then demonstrated on the repo's v2
@@ -91,10 +91,9 @@ async function runArm({ name, dir, arm, contract, source, gt, invariants, apiKey
   let specPaths = [];
   if (args.reference) {
     // Replay-only degraded mode: the machine's reference spec stands in for a
-    // generation. It is a bare-next artifact — only valid for the legacy arm.
-    rec.generative = 'blocked';
-    rec.error = 'BLOCKED: eval/machines/*/reference.cjs are 1.x bare-next artifacts, removed in 8.0.0 — port them to SAM v2 to restore the offline arm';
-    return rec;
+    // generation. Since 8.0.0 the references are SAM v2 strict-profile ports
+    // (proven transition-table-identical to the 1.x bare-next originals over
+    // every reachable state × declared payload before the swap).
     const ref = join(dir, 'reference.cjs');
     if (!existsSync(ref)) { rec.error = 'no reference.cjs for this machine'; return rec; }
     specPaths = [ref];

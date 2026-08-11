@@ -93,10 +93,17 @@ to a bare state relation.
 - Grade comparability: 8.0 grades are measured under the six-operator fault
   model — kill-rates are not comparable to grades recorded before it.
 
-**Known gap:** `eval/machines/*/reference.cjs` are still 1.x artifacts, so
-the offline arms of `eval:ab-v2` and `eval:mechanism` are BLOCKED until
-those eight machines are ported to SAM v2. Both report this loudly rather
-than running.
+**Eval references ported.** All eight `eval/machines/*/reference.cjs` are
+SAM v2 strict-profile ports of the 1.x bare-next originals, proven
+**transition-table-identical** before the swap: BFS over every reachable
+state × declared payload comparing old `next()` against the new module
+through the adapter (m07-cart, unbounded in `count`, compared over a
+5000-state prefix: 24,980 transitions, zero mismatches), plus per-window
+replay-vector equality on every corpus. The offline arms of `eval:ab-v2`
+(`--reference`) and `eval:mechanism` run again; per-machine outcomes match
+main's legacy arm exactly (5/5 seeded detectable, 2/2 clean silent, 1/1
+out-of-scope invisible), and the v2 references additionally surface
+rejection-reason classifications the bare-next originals could not.
 
 ## 6.3.0 — 2026-07-25
 

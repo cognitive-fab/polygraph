@@ -29,8 +29,8 @@ for (const name of machines) {
   gen.run();
 
   const windows = loadWindows(join(dir, 'traces'));
-  // BLOCKED in 8.0.0: eval/machines/*/reference.cjs are 1.x bare-next
-  // artifacts. Port them to SAM v2 to restore this eval.
+  // Since 8.0.0 the references are SAM v2 strict-profile ports of the 1.x
+  // bare-next originals (transition-table-identical, proven before the swap).
   const statuses = replaySpec(join(dir, 'reference.cjs'), windows);
   const fails = windows
     .map((w, i) => ({ scenario: w.scenario, action: w.action, pre: w.pre, st: statuses[i] }))

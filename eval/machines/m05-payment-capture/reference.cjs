@@ -2,18 +2,59 @@
 // Apparent-intent reference: a partial authorization (approved < requested
 // amount) is declined; only a full-or-over authorization captures. Differs from
 // the code at exactly one window: a partial approval on a pending request.
-function init() {
-  return { status: 'pending', amount: 0, approved: 0 };
-}
-function next(s, action, data) {
-  const d = data || {};
-  if (action === 'REQUEST' && s.status === 'pending') {
-    return { status: 'pending', amount: d.amount, approved: 0 };
-  }
-  if (action === 'AUTHORIZE' && s.status === 'pending') {
-    if (d.approved < s.amount) return { status: 'declined', amount: s.amount, approved: 0 }; // reject partials
-    return { status: 'captured', amount: s.amount, approved: d.approved };
-  }
-  return { status: s.status, amount: s.amount, approved: s.approved };
-}
-module.exports = { init, next };
+//
+// SAM v2 strict-profile port of the 1.x bare-next reference (8.0.0):
+// transition-table-identical over every reachable state × declared payload;
+// former identity fall-throughs are observable reject(reason)s.
+const { createInstance } = require('@cognitive-fab/sam-pattern');
+
+const instance = createInstance({ strict: true, hasAsyncActions: false, instanceName: 'm05-reference' });
+
+const INITIAL_STATE = { status: 'pending', amount: 0, approved: 0 };
+
+const control = instance({
+  initialState: JSON.parse(JSON.stringify(INITIAL_STATE)),
+  component: {
+    modelShape: { status: { type: 'string' }, amount: { type: 'number' }, approved: { type: 'number' } },
+    actions: {
+      REQUEST: {
+        action: (d = {}) => ({ ...d }),
+        schema: { amount: { type: 'number', required: true } },
+        domain: [{ amount: 50 }, { amount: 100 }],
+      },
+      AUTHORIZE: {
+        action: (d = {}) => ({ ...d }),
+        schema: { approved: { type: 'number', required: true } },
+        domain: [{ approved: 0 }, { approved: 50 }, { approved: 60 }, { approved: 100 }, { approved: 120 }],
+      },
+    },
+    acceptors: {
+      REQUEST: (model) => (p, { reject, next }) => {
+        if (model.status !== 'pending') return reject('not-pending');
+        next.status = 'pending';
+        next.amount = p.amount;
+        next.approved = 0;
+      },
+      AUTHORIZE: (model) => (p, { reject, next, unchanged }) => {
+        if (model.status !== 'pending') return reject('not-pending');
+        if (p.approved < model.amount) {
+          next.status = 'declined'; // reject partials
+          next.approved = 0;
+          unchanged('amount');
+          return;
+        }
+        next.status = 'captured';
+        next.approved = p.approved;
+        unchanged('amount');
+      },
+    },
+    reactors: [],
+  },
+});
+
+const { intents } = control;
+const getState = () => instance({}).getState();
+const setState = (s) => { instance({}).setState(s); };
+const init = () => { setState(INITIAL_STATE); };
+const actions = Object.fromEntries(Object.keys(intents).map((k) => [k, (d = {}) => intents[k](d)]));
+module.exports = { instance, init, actions, getState, setState };
