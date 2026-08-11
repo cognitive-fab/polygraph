@@ -766,7 +766,12 @@ test('m3-review: a spawn without a childKey is a defect in every cell (kernel po
   const dir = scratchCopy('po-v1');
   try {
     const src = readFileSync(join(dir, 'effects.cjs'), 'utf-8');
-    writeFileSync(join(dir, 'effects.cjs'), src.replace("childKey: 'c1',\n", ''));
+    // \r?\n: a fresh checkout under core.autocrlf materializes the fixture
+    // with CRLF, and a missed replace here silently tests NOTHING (the spawn
+    // keeps its childKey and the matrix passes).
+    const cut = src.replace(/childKey: 'c1',\r?\n/, '');
+    assert.notEqual(cut, src, 'fixture surgery must take — a no-op replace would vacuously pass the machine');
+    writeFileSync(join(dir, 'effects.cjs'), cut);
     const po = await loadArtifacts(dir);
     const ship = await load('ship-v1');
     const result = runMatrix({ parentOld: po, parentNew: po, childOld: ship, childNew: ship, childMachineId: 'shipment' });
