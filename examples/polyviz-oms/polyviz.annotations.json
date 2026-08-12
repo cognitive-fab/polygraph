@@ -1,28 +1,52 @@
 {
-  "meta": { "theme": "dark" },
+  "meta": {
+    "theme": "dark",
+    "footer": "Provable Trust"
+  },
   "machine": {
     "kicker": "THE ORDER MACHINE",
     "title": "The order lifecycle, and what it must never do"
   },
   "invariants": {
-    "S1-no-delivery-without-charge": { "id": "S1", "text": "Never deliver an order that was never charged" },
-    "S2-charged-implies-post-charge": { "id": "S2", "text": "Never mark an order charged before the charge step" },
-    "L1-cancellable-until-charged": { "id": "L1", "text": "An order stays cancellable until it is charged (reachability — checked separately)", "status": "unchecked" }
+    "S1-no-delivery-without-charge": {
+      "id": "S1",
+      "text": "Never deliver an order that was never charged"
+    },
+    "S2-charged-implies-post-charge": {
+      "id": "S2",
+      "text": "Never mark an order charged before the charge step"
+    },
+    "L1-cancellable-until-charged": {
+      "id": "L1",
+      "text": "An order stays cancellable until it is charged (reachability — checked separately)",
+      "status": "unchecked"
+    }
   },
   "counterexample": {
-    "kicker": "THE BUG IT CAUGHT",
-    "title": "The gate wrote its own reproduction",
-    "subtitle": "I deleted the guard that blocks ship() until the charge succeeds. Then I asked the gate.",
+    "kicker": "WHAT THE CHECK FOUND",
+    "title": "Three steps to goods delivered and never paid for",
+    "subtitle": "One guard was removed: the check that stops an order shipping before its payment succeeds. Polygraph then tried every order of events the machine allows.",
     "invariantId": "S1",
-    "violationTitle": "S1 VIOLATED — delivered without payment",
-    "violationDetail": "With the charge guard removed, the gate drove a never-charged order all the way to delivered()."
+    "violationTitle": "RULE BROKEN — delivered, never charged",
+    "violationDetail": "The order reached DELIVERED while charged was still false. Each step on its own was permitted; the sequence is what breaks the rule.",
+    "callout": {
+      "title": "Nobody wrote this test.",
+      "body": "Polygraph explored every state the order can reach, found the one that breaks the rule, and returned the shortest way to get there. The path is executable, so it becomes a regression test.",
+      "cleanPasses": true
+    }
   },
   "compat": {
     "kicker": "THE HARD PART",
     "title": "State outlives its code",
     "subtitle": "The bug isn't in the new code. It's in the state the old code already left behind.",
-    "from": { "label": "RULE v1", "detail": "ship after charge" },
-    "to": { "label": "RULE v2  (deploy)", "detail": "+ risk-hold blocks ship" },
+    "from": {
+      "label": "RULE v1",
+      "detail": "ship after charge"
+    },
+    "to": {
+      "label": "RULE v2  (deploy)",
+      "detail": "+ risk-hold blocks ship"
+    },
     "verdictTitle": "DEPLOY BLOCKED"
   }
 }
