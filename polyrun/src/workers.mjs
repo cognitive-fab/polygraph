@@ -224,15 +224,21 @@ function resolvePath(context, path) {
 
 function withTimeout(promise, ms, message, extraMs = () => 0) {
   let handle;
+  // unref'd, like the poll loops in start(). This timer stays armed for as long
+  // as the handler runs, and a handler may PARK rather than compute: polyflow
+  // hands the effect to an agent or a person, who may take hours, with lease
+  // extensions re-arming this timer the whole time. Ref'd, that means any
+  // process holding an open work order can never exit on its own.
+  const arm = (delay, fn) => { const h = setTimeout(fn, delay); h.unref?.(); return h; };
   const timeout = new Promise((_, reject) => {
     let consumed = 0;
     const fire = () => {
       // lease extensions granted while running extend the timeout budget
       const banked = extraMs() - consumed;
-      if (banked > 0) { consumed += banked; handle = setTimeout(fire, banked); return; }
+      if (banked > 0) { consumed += banked; handle = arm(banked, fire); return; }
       reject(new Error(message));
     };
-    handle = setTimeout(fire, ms);
+    handle = arm(ms, fire);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(handle));
 }
