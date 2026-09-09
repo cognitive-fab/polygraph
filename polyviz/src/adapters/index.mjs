@@ -8,6 +8,7 @@ import { adaptCompat } from './compat.mjs';
 import { deriveMachine } from './machine.mjs';
 import { adaptInvariants } from './invariants.mjs';
 import { adaptCounterexample, rejectReason } from './counterexample.mjs';
+import { DEFAULT_BRAND, DEFAULT_FOOTER } from '../brand.mjs';
 
 // Bounded recursive search for a named artifact file (reports often nest under
 // reports/<changeId>/). Returns the first match, or null.
@@ -46,7 +47,7 @@ function loadAnnotations(dir) {
   return p ? JSON.parse(readFileSync(p, 'utf8')) : {};
 }
 
-const DEFAULT_META = { brand: 'COGNITIVE FAB · POLYGRAPH', footer: "verify, don't review", theme: 'dark' };
+const DEFAULT_META = { brand: DEFAULT_BRAND, footer: DEFAULT_FOOTER, theme: 'dark' };
 
 /**
  * Build a viz-model from a Polygraph/polyvers artifacts directory. Each

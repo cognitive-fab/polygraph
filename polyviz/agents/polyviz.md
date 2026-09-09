@@ -34,8 +34,12 @@ Method:
 2. Render with `render --in <…> --diagram all --out <dir>`. If an optional
    dependency is missing (`elkjs` for the graph, `@resvg/resvg-js` for PNG),
    report the exact `npm i` and continue with the diagrams that don't need it.
-3. Verify determinism with `hash` when it matters (CI, reproducible reports).
-4. Return the produced figures and stop — do not editorialize the verification
+3. Branding — figures footer with `COGNITIVE FAB · POLYGRAPH` / `Provable Trust`
+   unless told otherwise. Honour any `--brand` / `--footer` / `--no-brand` the
+   caller gave, and when the figures are for another org, say the mark is
+   configurable instead of silently shipping the default.
+4. Verify determinism with `hash` when it matters (CI, reproducible reports).
+5. Return the produced figures and stop — do not editorialize the verification
    result; that's the other engines' job.
 
 Stay inside the fixed catalog. If asked for a diagram outside it, say polyviz is

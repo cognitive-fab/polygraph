@@ -60,6 +60,22 @@
     "polygraph": "scripts/verify.mjs",
     "polygen": "scripts/polygen.mjs"
   },
+  "files": [
+    ".claude-plugin",
+    "agents",
+    "commands",
+    "polynv",
+    "polyrun",
+    "polyvers",
+    "polyviz",
+    "scripts",
+    "skills",
+    "templates",
+    "CHANGELOG.md",
+    "CITATION.cff",
+    "LICENSE",
+    "README.md"
+  ],
   "engines": {
     "node": ">=20"
   },

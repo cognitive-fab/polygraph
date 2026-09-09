@@ -42,5 +42,9 @@ Workflow:
    raster deliverable.
 2. When `--in` is a run directory, warn that the machine graph is derived by
    executing the module, and offer a `polyviz.annotations.json` for nicer copy.
-3. Use `hash` to prove determinism in CI. The reference figures under
+3. Branding (footer wordmark + tagline, default `COGNITIVE FAB · POLYGRAPH` /
+   `Provable Trust`) is configurable per render: `--brand "…"`, `--footer "…"`,
+   `--no-brand`, or `meta.brand`/`meta.footer` in the model or annotations. Ask
+   which mark applies when rendering for someone else's org.
+4. Use `hash` to prove determinism in CI. The reference figures under
    `${CLAUDE_PLUGIN_ROOT}/reference/` are the visual acceptance bar.

@@ -3,6 +3,7 @@
 //
 //   polyviz render --in <file.polyviz.json> --diagram <all|invariants|...>
 //                  --out <dir> [--format svg[,png]] [--theme dark|light] [--tokens f.json]
+//                  [--brand "WORDMARK"] [--footer "tagline"] [--no-brand]
 //   polyviz hash   --in <file.polyviz.json> --diagram <...>
 //   polyviz schema
 //
@@ -18,6 +19,7 @@ import { adaptDir } from '../src/adapters/index.mjs';
 import { renderPng } from '../src/raster/png.mjs';
 import { injectReport, buildManifest } from '../src/report.mjs';
 import { DIAGRAMS, DIAGRAM_IDS, availableFor } from '../src/diagrams/index.mjs';
+import { applyBrandOverrides } from '../src/brand.mjs';
 
 function parseArgs(argv) {
   const args = {};
@@ -38,8 +40,10 @@ function die(msg) {
   process.exit(1);
 }
 
-async function loadModel(inPath) {
+async function loadModel(inPath, args = {}) {
   if (!inPath) die('missing --in <file.polyviz.json>');
+  if (args.brand === true) die('--brand needs a value (use --no-brand to drop the footer line)');
+  if (args.footer === true) die('--footer needs a value (use --no-brand to drop the footer line)');
   const p = resolve(inPath);
   let st;
   try { st = statSync(p); } catch { die(`--in not found: ${inPath}`); }
@@ -51,6 +55,9 @@ async function loadModel(inPath) {
     try { model = JSON.parse(readFileSync(p, 'utf8')); }
     catch (e) { die(`could not parse ${inPath}: ${e.message}`); }
   }
+  model = applyBrandOverrides(model, {
+    brand: args.brand, footer: args.footer, noBrand: args['no-brand'] === true
+  });
   try { validate(model); }
   catch (e) { die(e.message); }
   return model;
@@ -87,7 +94,7 @@ async function render(model, ids, opts) {
 }
 
 async function cmdRender(args) {
-  const model = await loadModel(args.in);
+  const model = await loadModel(args.in, args);
   const ids = selectDiagrams(model, args.diagram);
   const formats = String(args.format || 'svg').split(',').map((s) => s.trim());
   const known = new Set(['svg', 'png']);
@@ -115,7 +122,7 @@ async function cmdRender(args) {
 }
 
 async function cmdHash(args) {
-  const model = await loadModel(args.in);
+  const model = await loadModel(args.in, args);
   const ids = selectDiagrams(model, args.diagram);
   const results = await render(model, ids, { theme: args.theme, tokensFile: args.tokens });
   for (const r of results) process.stdout.write(`${sha256(r.svg)}  ${r.id}\n`);
@@ -126,7 +133,7 @@ function cmdSchema() {
 }
 
 async function cmdReport(args) {
-  const model = await loadModel(args.in);
+  const model = await loadModel(args.in, args);
   const ids = selectDiagrams(model, args.diagram);
   const formats = String(args.format || 'svg').split(',').map((s) => s.trim());
   const unsupported = formats.filter((f) => f !== 'svg' && f !== 'png');
@@ -172,6 +179,6 @@ switch (cmd) {
   case 'report': cmdReport(args).catch((e) => die(e.message)); break;
   case 'schema': cmdSchema(); break;
   default:
-    process.stderr.write('usage: polyviz <render|hash|report|schema> [--in f] [--diagram id] [--out dir] [--img dir] [--report REPORT.md] [--format svg,png] [--theme dark|light] [--tokens f] [--scale N]\n');
+    process.stderr.write('usage: polyviz <render|hash|report|schema> [--in f] [--diagram id] [--out dir] [--img dir] [--report REPORT.md] [--format svg,png] [--theme dark|light] [--tokens f] [--scale N] [--brand TEXT] [--footer TEXT] [--no-brand]\n');
     process.exit(cmd ? 1 : 0);
 }

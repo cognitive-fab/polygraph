@@ -74,8 +74,14 @@ If an optional dep is missing, the CLI fails loud with the exact `npm i …` to 
    `polyviz.annotations.json` for nicer copy.
 3. Default to `--format svg` (deterministic, diffable). Add `png` only when they
    want a raster (decks, docs).
-4. Use `polyviz hash` in CI to assert determinism (same input → same sha256).
-5. The reference figures in `${CLAUDE_PLUGIN_ROOT}/reference/` are the visual bar.
+4. **Branding is configurable.** Figures carry a footer: wordmark left, tagline
+   right, defaulting to `COGNITIVE FAB · POLYGRAPH` / `Provable Trust`. Override
+   per render with `--brand "…"` / `--footer "…"`, drop it entirely with
+   `--no-brand`, or set `meta.brand` / `meta.footer` in the viz-model or
+   `polyviz.annotations.json`. If the user is rendering for their own org or a
+   client deck, ask which mark they want rather than shipping the default.
+5. Use `polyviz hash` in CI to assert determinism (same input → same sha256).
+6. The reference figures in `${CLAUDE_PLUGIN_ROOT}/reference/` are the visual bar.
 
 Keep the output to the fixed catalog. If the user wants a diagram outside it,
 say so — polyviz is deliberately not a general drawing tool.

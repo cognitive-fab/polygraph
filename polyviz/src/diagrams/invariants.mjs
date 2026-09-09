@@ -9,6 +9,7 @@
 import { svg, text } from '../render/svg.mjs';
 import { color } from '../render/theme.mjs';
 import { chrome, panel, PAD, contentTop, wrapText, measureText } from '../render/components.mjs';
+import { brandOf } from '../brand.mjs';
 
 const WIDTH = 1200;
 const IPAD = 36;        // panel inner padding
@@ -88,8 +89,7 @@ export function renderInvariants(model, { tokens }) {
   const meta = model.meta ?? {};
   const kicker = meta.kicker ?? model.machine?.kicker ?? 'WHAT GETS CHECKED';
   const title = meta.title ?? model.machine?.title ?? 'The must-nevers';
-  const brand = meta.brand ?? 'COGNITIVE FAB · POLYGRAPH';
-  const footer = meta.footer ?? "verify, don't review";
+  const { brand, footer } = brandOf(meta);
 
   const top = contentTop();
   const built = invariantsPanel(tokens, { x: PAD, y: top, w: WIDTH - PAD * 2, invariants });

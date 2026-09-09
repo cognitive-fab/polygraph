@@ -8,6 +8,7 @@
 import { svg, el, text } from '../render/svg.mjs';
 import { color } from '../render/theme.mjs';
 import { chrome, panel, roundRect, banner, arrowHead, contentTop, wrapText, ellipsize, PAD } from '../render/components.mjs';
+import { brandOf } from '../brand.mjs';
 
 const WIDTH = 760;
 const INNER = WIDTH - PAD * 2;      // 664
@@ -71,8 +72,7 @@ export function renderCompat(model, { tokens }) {
   const meta = model.meta ?? {};
   const kicker = compat.kicker ?? 'THE HARD PART';
   const title = compat.title ?? 'State outlives its code';
-  const brand = meta.brand ?? 'COGNITIVE FAB · POLYGRAPH';
-  const footer = meta.footer ?? "verify, don't review";
+  const { brand, footer } = brandOf(meta);
   const subtitleLines = compat.subtitle
     ? wrapText(compat.subtitle, { size: 16, maxWidth: INNER })
     : [];

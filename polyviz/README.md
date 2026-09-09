@@ -54,7 +54,7 @@ separate diagram.
 
 ```
 polyviz render --in <dir|polyviz.json> --diagram <all|state-machine|invariants|counterexample|compat-gate|model-card> \
-               --out <dir> [--format svg[,png]] [--theme dark|light] [--tokens f.json] [--scale 2]
+               --out <dir> [--format svg[,png]] [--theme dark|light] [--tokens f.json] [--scale 2]                [--brand "WORDMARK"] [--footer "tagline"] [--no-brand]
 polyviz hash   --in <dir|polyviz.json> --diagram <...>   # sha256 per SVG, no files
 polyviz report --in <dir|polyviz.json> --diagram <...> --img <dir> [--report REPORT.md] [--format svg,png]
                # render into <img>, write manifest.json, and (with --report) inject image refs
@@ -63,6 +63,43 @@ polyviz schema                                            # print the viz-model 
 ```
 
 From the repo root: `npm run polyviz -- render --in polyviz/fixtures/daao.polyviz.json --diagram invariants --out out`.
+
+## Branding (change it, or turn it off)
+
+Every figure carries a footer row: a **wordmark** on the left and a **tagline**
+on the right. The shipped defaults are `COGNITIVE FAB · POLYGRAPH` and
+`Provable Trust`. Both live in one place — `src/brand.mjs` — and nothing else in
+the renderer knows those strings. They are defaults, not constants:
+
+```
+src/brand.mjs defaults  <  model.meta / polyviz.annotations.json  <  CLI flags
+```
+
+```bash
+# render under your own mark
+polyviz render --in artifacts --out img --brand "ACME · PLATFORM QA" --footer "shipped on evidence"
+
+# keep the wordmark, change only the tagline
+polyviz render --in artifacts --out img --footer "shipped on evidence"
+
+# no branding at all — the footer row disappears
+polyviz render --in artifacts --out img --no-brand
+```
+
+To set it once instead of per invocation, put it in the viz-model's `meta` (or in
+`polyviz.annotations.json` when rendering from an artifacts directory):
+
+```jsonc
+{ "meta": { "brand": "ACME · PLATFORM QA", "footer": "shipped on evidence" } }
+```
+
+An empty string suppresses just that side (`"brand": ""` keeps the tagline
+alone). To change the default for every render in your own fork, edit
+`DEFAULT_BRAND` / `DEFAULT_FOOTER` in `src/brand.mjs` — that is the only edit
+required.
+
+Branding is part of the rendered bytes, so changing it changes the sha256. That
+is intended: a figure's hash identifies exactly the figure that was published.
 
 ## Installing (optional, separate from polygraph)
 
@@ -130,7 +167,8 @@ artifacts to a viz-model. Shipped:
 
 An optional `polyviz.annotations.json` in the directory overrides the narrative
 fields the raw artifacts don't carry (titles, invariant text, version labels,
-state highlights).
+state highlights) — and `meta.brand` / `meta.footer` if you want a different
+wordmark for that run (see [Branding](#branding-change-it-or-turn-it-off)).
 
 PNG export (`--format png`, default `--scale 2`) rasterizes each SVG with
 `@resvg/resvg-js` — no headless browser. Deterministic per-platform (byte-

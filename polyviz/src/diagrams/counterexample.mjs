@@ -12,6 +12,7 @@ import { color } from '../render/theme.mjs';
 import {
   chrome, panel, nodeBox, hArrow, banner, contentTop, measureText, wrapText, PAD
 } from '../render/components.mjs';
+import { brandOf } from '../brand.mjs';
 
 const WIDTH = 1200;
 const BOX_H = 58;
@@ -73,8 +74,7 @@ export function renderCounterexample(model, { tokens, log = () => {} }) {
   const meta = model.meta ?? {};
   const kicker = trace.kicker ?? 'THE BUG IT CAUGHT';
   const title = trace.title ?? 'The gate wrote its own reproduction';
-  const brand = meta.brand ?? 'COGNITIVE FAB · POLYGRAPH';
-  const footer = meta.footer ?? "verify, don't review";
+  const { brand, footer } = brandOf(meta);
   const subtitleLines = trace.subtitle
     ? wrapText(trace.subtitle, { size: 17, maxWidth: WIDTH - PAD * 2 })
     : [];

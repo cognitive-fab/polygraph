@@ -10,6 +10,7 @@ import { chrome, contentTop, wrapText, PAD } from '../render/components.mjs';
 import { layoutMachine } from '../layout/graph.mjs';
 import { placeGraph } from './state-machine.mjs';
 import { invariantsPanel } from './invariants.mjs';
+import { brandOf } from '../brand.mjs';
 
 const WIDTH = 1200;
 const FOOTER_RESERVE = 70;
@@ -31,8 +32,7 @@ export async function renderModelCard(model, { tokens, log }) {
   const meta = model.meta ?? {};
   const kicker = meta.kicker ?? machine.kicker ?? 'WHAT GETS CHECKED';
   const title = meta.title ?? machine.title ?? 'The machine, and what it must never do';
-  const brand = meta.brand ?? 'COGNITIVE FAB · POLYGRAPH';
-  const footer = meta.footer ?? "verify, don't review";
+  const { brand, footer } = brandOf(meta);
   const subtitleLines = machine.subtitle
     ? wrapText(machine.subtitle, { size: 17, maxWidth: WIDTH - PAD * 2 })
     : [];

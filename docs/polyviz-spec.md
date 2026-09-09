@@ -102,7 +102,7 @@ Five stages, each pure and independently testable:
 ### 4.2 The viz-model (canonical intermediate) — sketch
 ```jsonc
 {
-  "meta": { "title": "", "subtitle": "", "kicker": "", "theme": "dark", "brand": "COGNITIVE FAB · POLYGRAPH", "footer": "verify, don't review" },
+  "meta": { "title": "", "subtitle": "", "kicker": "", "theme": "dark", "brand": "COGNITIVE FAB · POLYGRAPH", "footer": "Provable Trust" },
   "machine": {
     "states": [{ "id": "APPROVED", "label": "APPROVED", "kind": "normal|terminal|highlight", "role": "" }],
     "transitions": [{ "from": "APPROVED", "event": "release", "guard": "now∈window", "to": "RELEASED", "effect": "transmit ×1", "emphasis": "none|accent|violation", "note": "" }]
@@ -152,6 +152,14 @@ table or embed the woff2 and read metrics) so wrapping is deterministic and matc
 `dark` (default) mirrors `polyviz/reference/tokens.dark.json` (the palette used in the reference
 figures). `light` for print/docs. `--tokens` overrides. Renderers must reference tokens only —
 CI greps for hex literals in renderer files and fails if found.
+
+### 4.6b Branding (configurable, never hard-coded)
+The footer row is a wordmark (left) + tagline (right). Defaults ship in `src/brand.mjs` —
+`COGNITIVE FAB · POLYGRAPH` / `Provable Trust` — and are the *only* place those strings appear;
+diagrams call `brandOf(meta)`. Resolution order: defaults < `model.meta` (or
+`polyviz.annotations.json`) < CLI `--brand` / `--footer`. `--no-brand` blanks both, and an empty
+string suppresses one side — a third party must be able to render this catalog under their own
+mark, or under none. Branding is part of the rendered bytes, so it participates in the sha256.
 
 ### 4.7 Determinism (hard requirement + test)
 - No wall-clock/random. Stable map iteration (sort keys). Fixed decimal formatting/locale.

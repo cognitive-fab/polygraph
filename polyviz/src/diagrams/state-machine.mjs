@@ -6,6 +6,7 @@ import { svg, el, text, num, node } from '../render/svg.mjs';
 import { color } from '../render/theme.mjs';
 import { chrome, nodeBox, arrowHead, contentTop, wrapText, PAD } from '../render/components.mjs';
 import { layoutMachine } from '../layout/graph.mjs';
+import { brandOf } from '../brand.mjs';
 
 const WIDTH = 1200;
 const FOOTER_RESERVE = 70;
@@ -95,8 +96,7 @@ export async function renderStateMachine(model, { tokens, log }) {
   const meta = model.meta ?? {};
   const kicker = meta.kicker ?? machine.kicker ?? 'THE MACHINE';
   const title = meta.title ?? machine.title ?? 'The lifecycle';
-  const brand = meta.brand ?? 'COGNITIVE FAB · POLYGRAPH';
-  const footer = meta.footer ?? "verify, don't review";
+  const { brand, footer } = brandOf(meta);
   const subtitleLines = machine.subtitle
     ? wrapText(machine.subtitle, { size: 17, maxWidth: WIDTH - PAD * 2 })
     : [];
