@@ -1,6 +1,6 @@
 {
   "name": "@cognitive-fab/polygraph",
-  "version": "8.1.0",
+  "version": "8.2.0",
   "description": "A polygraph for your state machine: an LLM derives a transition-function spec from your code (default: SAM v2 strict-profile module; --legacy-bare-next for the bare next(state, action, data) artifact), then Polygraph replays real traces against it (conformance) AND model-checks it against invariants (finds bugs by exhaustive iteration), with an optional TLC escalation tier (--tla). Also includes polygen: author NEW verifiable code from a feature description.",
   "type": "module",
   "license": "Apache-2.0",
@@ -83,12 +83,20 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@cognitive-fab/sam-fsm": "^2.1.0"
+    "@cognitive-fab/sam-fsm": "^2.1.0",
+    "pg": "^8.22.0"
   },
   "dependencies": {
     "@cognitive-fab/sam-pattern": "^2.2.0",
-    "acorn": "^8.17.0",
-    "pg": "^8.22.0"
+    "acorn": "^8.17.0"
+  },
+  "peerDependencies": {
+    "pg": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
   },
   "optionalDependencies": {
     "@resvg/resvg-js": "^2.6.2",

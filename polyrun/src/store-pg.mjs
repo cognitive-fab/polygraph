@@ -10,7 +10,40 @@
 'use strict';
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import pg from 'pg';
+import { createRequire } from 'node:module';
+
+// `pg` IS LOADED WHEN A PgStore IS BUILT, NOT WHEN THIS MODULE IS.
+//
+// It used to be a top-level import, and `polyrun/src/index.mjs` imports this
+// module unconditionally to re-export `PgStore` — so every consumer of polyrun
+// had to have a Postgres driver on disk in order to run a state machine against
+// a local SQLite file. That is a dependency paid by everyone for a store most
+// of them never open, and it made `pg` un-droppable from `package.json` no
+// matter what the field said.
+//
+// `createRequire` rather than `await import()` because the constructor below is
+// SYNCHRONOUS and is called as `new PgStore(...)` by `createStore` and by the
+// tests. Making it async to satisfy a packaging decision would change polyrun's
+// public API, which is the wrong way round.
+const require = createRequire(import.meta.url);
+
+let pgModule = null;
+function pg() {
+  if (pgModule) return pgModule;
+  try {
+    pgModule = require('pg');
+  } catch (err) {
+    // Named and actionable, and it says which of the two stores is affected —
+    // a bare MODULE_NOT_FOUND here reads as "polyrun is broken" rather than
+    // "the Postgres store needs its driver".
+    throw new Error(
+      "polyrun's Postgres store needs the 'pg' package, which is an optional peer dependency and is not installed. " +
+        'Run `npm install pg`, or use the default SQLite store by passing `{sqlite: <path>}` instead of `{postgres: <url>}`. ' +
+        `(${err.message})`,
+    );
+  }
+  return pgModule;
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS pr_instance (
@@ -80,7 +113,7 @@ export class PgStore {
    *  used by the test suite for per-runtime isolation on one database. */
   constructor(connectionString, poolOptions = {}, schema) {
     this.schema = schema;
-    this.pool = new pg.Pool({
+    this.pool = new (pg().Pool)({
       connectionString,
       max: 10,
       ...(schema ? { options: `-csearch_path=${schema}` } : {}),
