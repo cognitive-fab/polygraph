@@ -1,0 +1,119 @@
+[
+  {
+    "id": "prior:closure-reason-monotone",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Once a spare index's lease has been closed with reason 'Swap', is it guaranteed that no later action can rewrite that closure reason back to 'None'?",
+    "js": "(pre, action, data, post) => [0,1,2].every(i => pre['reason'+i] !== 'Swap' || post['reason'+i] === 'Swap')",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "A lease closure reason is write-once: once a lease is closed with a reason, that reason is immutable (closure records are append-only, never rewritten)."
+  },
+  {
+    "id": "prior:consumed-capacity-not-double-spent",
+    "kind": "domain-prior",
+    "target": "state",
+    "question": "In every reachable state, is a spare index whose lease closed with reason 'Swap' required to have no live intent pod (its funded capacity now carries the swapped-in active work)?",
+    "js": "(s) => [0,1,2].every(i => s['reason'+i] !== 'Swap' || s['pod'+i] === 'Gone')",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "Funded capacity is conserved: capacity already consumed by a swap cannot simultaneously back a standby spare pod — no slot is spent twice."
+  },
+  {
+    "id": "prior:declared-spare-budget-never-exceeded",
+    "kind": "domain-prior",
+    "target": "state",
+    "question": "Is the sum of live spare pods plus swap-consumed spare slots always at most the run's declared spare count (3)?",
+    "js": "(s) => ([0,1,2].filter(i => s['pod'+i] === 'Live').length + [0,1,2].filter(i => s['reason'+i] === 'Swap').length) <= 3",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "A reconciler never over-provisions beyond the declared desired count; live replicas plus retired-but-charged slots stay within the funded budget."
+  },
+  {
+    "id": "prior:reconcile-restores-desired-count",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "After a TopUp, must every spare index that has not been consumed by a swap have a live intent pod, regardless of which indices went missing and in what order?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || [0,1,2].every(i => post['reason'+i] === 'Swap' || post['pod'+i] === 'Live')",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "Reconciliation converges: one reconcile pass drives observed state to desired state for every slot that is still supposed to exist, independent of the order in which slots were lost."
+  },
+  {
+    "id": "prior:reconcile-idempotent",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "If every non-consumed spare index is already live, is TopUp required to be a no-op (no state change at all)?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || ![0,1,2].every(i => pre['reason'+i] === 'Swap' || pre['pod'+i] === 'Live') || [0,1,2].every(i => post['pod'+i] === pre['pod'+i] && post['reason'+i] === pre['reason'+i])",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "Reconcile loops are idempotent: re-running against an already-converged state produces no writes."
+  },
+  {
+    "id": "prior:retirement-is-terminal-for-a-slot",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Is a spare index whose lease closed with reason 'Swap' permanently retired, so that no TopUp may ever bring its pod back to 'Live'?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || [0,1,2].every(i => pre['reason'+i] !== 'Swap' || post['pod'+i] === 'Gone')",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "A slot retired by promotion is not re-created by the reconciler; desired state shrinks by the promoted slots rather than the controller resurrecting them."
+  },
+  {
+    "id": "prior:closure-reason-set-only-by-its-own-event",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Can a spare index's closure reason become 'Swap' only as the direct result of a SwapConsume naming that same index?",
+    "js": "(pre, action, data, post) => [0,1,2].every(i => pre['reason'+i] === 'Swap' || post['reason'+i] !== 'Swap' || (action === 'SwapConsume' && data && String(data.idx) === String(i)))",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "Status attribution is precise: a closure reason is stamped only by the event that actually caused that closure, on exactly the object it happened to."
+  },
+  {
+    "id": "prior:per-slot-isolation",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Does an event naming one spare index (LosePod or SwapConsume) leave all other indices' pods and closure reasons completely untouched?",
+    "js": "(pre, action, data, post) => (action !== 'LosePod' && action !== 'SwapConsume') || !data || [0,1,2].every(i => String(i) === String(data.idx) || (post['pod'+i] === pre['pod'+i] && post['reason'+i] === pre['reason'+i]))",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "Replica slots are independent: an event affecting one replica must not mutate a sibling replica's object or status (no wrong-sibling closures)."
+  },
+  {
+    "id": "llm:swap-requires-a-live-spare",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "Is SwapConsume(idx) only permitted when index idx currently has a live spare pod for the swap to land on?",
+    "js": "(pre, action, data, post) => action !== 'SwapConsume' || (!!data && pre['pod'+data.idx] === 'Live')",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "A node-failure swap lands on real, funded standby capacity, so it can only consume a spare that currently exists."
+  },
+  {
+    "id": "llm:swap-retires-that-index",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "Does SwapConsume(idx) always leave index idx with its pod 'Gone' and its closure reason 'Swap'?",
+    "js": "(pre, action, data, post) => action !== 'SwapConsume' || (!!data && post['pod'+data.idx] === 'Gone' && post['reason'+data.idx] === 'Swap')",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "Promotion of a spare both removes the standby pod and closes its lease with reason 'Swap' atomically."
+  },
+  {
+    "id": "llm:eviction-is-not-a-swap-closure",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "Does LosePod(idx) leave the closure reason of index idx unchanged (an external eviction or drain must never be recorded as 'Swap')?",
+    "js": "(pre, action, data, post) => action !== 'LosePod' || (!!data && post['reason'+data.idx] === pre['reason'+data.idx] && post['pod'+data.idx] === 'Gone')",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "Externally caused disappearance of a replica is distinguishable from deliberate promotion; only the latter sets the 'Swap' closure reason, so the former stays re-provisionable."
+  },
+  {
+    "id": "llm:topup-only-adds",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "Is TopUp purely additive — never turning a live spare pod 'Gone' and never modifying any closure reason?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || [0,1,2].every(i => (pre['pod'+i] !== 'Live' || post['pod'+i] === 'Live') && post['reason'+i] === pre['reason'+i])",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "A top-up reconciler only creates missing objects; it never deletes surviving ones nor rewrites lease status."
+  },
+  {
+    "id": "llm:lost-unconsumed-spare-is-recoverable",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "If an index lost its pod without a swap (reason still 'None'), is it guaranteed that the very next TopUp restores it to 'Live', even when a lower- or higher-numbered index was already consumed?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || [0,1,2].every(i => !(pre['pod'+i] === 'Gone' && pre['reason'+i] === 'None') || post['pod'+i] === 'Live')",
+    "domain": "Kubernetes-style gang/GPU run controller: spare capacity reconciliation and lease closure",
+    "norm": "Out-of-order loss of a replica does not strand it: the reconciler fills the genuinely-missing indices rather than a prefix of the index range."
+  }
+]

@@ -1,0 +1,411 @@
+{
+  "format": "polynv-ledger/1",
+  "records": [
+    {
+      "id": "mined:precedence:TopUp->LosePod",
+      "source": "mined",
+      "target": "temporal",
+      "question": "In all 6 observed scenario(s) where 'LosePod' had an effect, 'TopUp' had already occurred first. Is \"no LosePod before TopUp\" a rule — or just how the recorded scenarios happened to run? (The pre-check explores whether the machine itself can violate it.)",
+      "evidence": {
+        "from": "mined:temporal",
+        "observations": 6,
+        "quote": "TopUp before LosePod in 6/6 scenarios containing LosePod"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "precedence",
+            "first": "TopUp",
+            "then": "LosePod"
+          },
+          "js": null,
+          "date": "2026-09-12T01:20:12.503Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 48,
+        "date": "2026-09-12T01:20:12.503Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-09-12T01:20:12.503Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-09-12T01:20:12.503Z"
+        }
+      ]
+    },
+    {
+      "id": "mined:precedence:TopUp->SwapConsume",
+      "source": "mined",
+      "target": "temporal",
+      "question": "In all 10 observed scenario(s) where 'SwapConsume' had an effect, 'TopUp' had already occurred first. Is \"no SwapConsume before TopUp\" a rule — or just how the recorded scenarios happened to run? (The pre-check explores whether the machine itself can violate it.)",
+      "evidence": {
+        "from": "mined:temporal",
+        "observations": 10,
+        "quote": "TopUp before SwapConsume in 10/10 scenarios containing SwapConsume"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "precedence",
+            "first": "TopUp",
+            "then": "SwapConsume"
+          },
+          "js": null,
+          "date": "2026-09-12T01:20:12.503Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 48,
+        "date": "2026-09-12T01:20:12.503Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-09-12T01:20:12.503Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-09-12T01:20:12.503Z"
+        }
+      ]
+    },
+    {
+      "id": "mined:in-domain:pod1",
+      "source": "mined",
+      "target": "state",
+      "question": "Across 138 observed states, 'pod1' only ever took 2 value(s): \"Gone\", \"Live\". Is that the complete legal domain — a rule — or an artifact of the scenarios observed so far?",
+      "evidence": {
+        "from": "mined:state",
+        "observations": 138,
+        "quote": "distinct values: 2"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "in-domain",
+            "field": "pod1",
+            "values": [
+              "Gone",
+              "Live"
+            ]
+          },
+          "js": "(s) => [\"Gone\",\"Live\"].some((v) => canon(v) === canon(s[\"pod1\"]))",
+          "date": "2026-09-12T01:20:12.503Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 48,
+        "date": "2026-09-12T01:20:12.503Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-09-12T01:20:12.503Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-09-12T01:20:12.503Z"
+        }
+      ]
+    },
+    {
+      "id": "mined:in-domain:pod2",
+      "source": "mined",
+      "target": "state",
+      "question": "Across 138 observed states, 'pod2' only ever took 2 value(s): \"Gone\", \"Live\". Is that the complete legal domain — a rule — or an artifact of the scenarios observed so far?",
+      "evidence": {
+        "from": "mined:state",
+        "observations": 138,
+        "quote": "distinct values: 2"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "in-domain",
+            "field": "pod2",
+            "values": [
+              "Gone",
+              "Live"
+            ]
+          },
+          "js": "(s) => [\"Gone\",\"Live\"].some((v) => canon(v) === canon(s[\"pod2\"]))",
+          "date": "2026-09-12T01:20:12.503Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 48,
+        "date": "2026-09-12T01:20:12.503Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-09-12T01:20:12.503Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-09-12T01:20:12.503Z"
+        }
+      ]
+    },
+    {
+      "id": "mined:in-domain:reason0",
+      "source": "mined",
+      "target": "state",
+      "question": "Across 138 observed states, 'reason0' only ever took 2 value(s): \"None\", \"Swap\". Is that the complete legal domain — a rule — or an artifact of the scenarios observed so far?",
+      "evidence": {
+        "from": "mined:state",
+        "observations": 138,
+        "quote": "distinct values: 2"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "in-domain",
+            "field": "reason0",
+            "values": [
+              "None",
+              "Swap"
+            ]
+          },
+          "js": "(s) => [\"None\",\"Swap\"].some((v) => canon(v) === canon(s[\"reason0\"]))",
+          "date": "2026-09-12T01:20:12.503Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 48,
+        "date": "2026-09-12T01:20:12.503Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-09-12T01:20:12.503Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-09-12T01:20:12.503Z"
+        }
+      ]
+    },
+    {
+      "id": "mined:in-domain:reason1",
+      "source": "mined",
+      "target": "state",
+      "question": "Across 138 observed states, 'reason1' only ever took 2 value(s): \"None\", \"Swap\". Is that the complete legal domain — a rule — or an artifact of the scenarios observed so far?",
+      "evidence": {
+        "from": "mined:state",
+        "observations": 138,
+        "quote": "distinct values: 2"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "in-domain",
+            "field": "reason1",
+            "values": [
+              "None",
+              "Swap"
+            ]
+          },
+          "js": "(s) => [\"None\",\"Swap\"].some((v) => canon(v) === canon(s[\"reason1\"]))",
+          "date": "2026-09-12T01:20:12.503Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 48,
+        "date": "2026-09-12T01:20:12.503Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-09-12T01:20:12.503Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-09-12T01:20:12.503Z"
+        }
+      ]
+    },
+    {
+      "id": "mined:in-domain:reason2",
+      "source": "mined",
+      "target": "state",
+      "question": "Across 138 observed states, 'reason2' only ever took 2 value(s): \"None\", \"Swap\". Is that the complete legal domain — a rule — or an artifact of the scenarios observed so far?",
+      "evidence": {
+        "from": "mined:state",
+        "observations": 138,
+        "quote": "distinct values: 2"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "in-domain",
+            "field": "reason2",
+            "values": [
+              "None",
+              "Swap"
+            ]
+          },
+          "js": "(s) => [\"None\",\"Swap\"].some((v) => canon(v) === canon(s[\"reason2\"]))",
+          "date": "2026-09-12T01:20:12.503Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "HOLDS",
+        "statesExplored": 48,
+        "date": "2026-09-12T01:20:12.503Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-09-12T01:20:12.503Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "HOLDS",
+          "date": "2026-09-12T01:20:12.503Z"
+        }
+      ]
+    },
+    {
+      "id": "mined:implication:pod0=Gone:reason1-eq",
+      "source": "mined",
+      "target": "state",
+      "question": "In all 38 observed states with pod0 == \"Gone\", 'reason1' was exactly \"None\" — while it varies elsewhere. Rule, or artifact?",
+      "evidence": {
+        "from": "mined:state",
+        "observations": 38,
+        "quote": "reason1 == \"None\" in all 38"
+      },
+      "status": "open",
+      "assign": null,
+      "versions": [
+        {
+          "nf": {
+            "kind": "implication",
+            "when": {
+              "field": "pod0",
+              "value": "Gone"
+            },
+            "then": {
+              "field": "reason1",
+              "op": "eq",
+              "value": "None"
+            }
+          },
+          "js": "(s) => canon(s[\"pod0\"]) !== canon(\"Gone\") || canon(s[\"reason1\"]) === canon(\"None\")",
+          "date": "2026-09-12T01:20:12.503Z",
+          "author": "harvest"
+        }
+      ],
+      "precheck": {
+        "verdict": "FAILS",
+        "detail": "reachable state violates the rule",
+        "kind": "state",
+        "counterexample": [
+          {
+            "action": null,
+            "data": null,
+            "state": {
+              "pod0": "Gone",
+              "pod1": "Gone",
+              "pod2": "Gone",
+              "reason0": "None",
+              "reason1": "None",
+              "reason2": "None"
+            }
+          },
+          {
+            "action": "TopUp",
+            "data": {},
+            "state": {
+              "pod0": "Live",
+              "pod1": "Live",
+              "pod2": "Live",
+              "reason0": "None",
+              "reason1": "None",
+              "reason2": "None"
+            }
+          },
+          {
+            "action": "LosePod",
+            "data": {
+              "idx": 0
+            },
+            "state": {
+              "pod0": "Gone",
+              "pod1": "Live",
+              "pod2": "Live",
+              "reason0": "None",
+              "reason1": "None",
+              "reason2": "None"
+            }
+          },
+          {
+            "action": "SwapConsume",
+            "data": {
+              "idx": 1
+            },
+            "state": {
+              "pod0": "Gone",
+              "pod1": "Gone",
+              "pod2": "Live",
+              "reason0": "None",
+              "reason1": "Swap",
+              "reason2": "None"
+            }
+          }
+        ],
+        "statesExplored": 48,
+        "date": "2026-09-12T01:20:12.503Z"
+      },
+      "events": [
+        {
+          "type": "harvested",
+          "date": "2026-09-12T01:20:12.503Z"
+        },
+        {
+          "type": "precheck",
+          "verdict": "FAILS",
+          "date": "2026-09-12T01:20:12.503Z"
+        }
+      ]
+    }
+  ]
+}

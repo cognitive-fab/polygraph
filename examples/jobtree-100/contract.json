@@ -1,0 +1,25 @@
+{
+  "stateKeys": [
+    { "name": "pod0", "type": "'Live' | 'Gone' — spare index 0's intent pod" },
+    { "name": "pod1", "type": "'Live' | 'Gone' — spare index 1's intent pod" },
+    { "name": "pod2", "type": "'Live' | 'Gone' — spare index 2's intent pod" },
+    { "name": "reason0", "type": "'None' | 'Swap' — closure reason of index 0's spare lease" },
+    { "name": "reason1", "type": "'None' | 'Swap' — closure reason of index 1's spare lease" },
+    { "name": "reason2", "type": "'None' | 'Swap' — closure reason of index 2's spare lease" }
+  ],
+  "initState": {
+    "pod0": "Gone", "pod1": "Gone", "pod2": "Gone",
+    "reason0": "None", "reason1": "None", "reason2": "None"
+  },
+  "actions": {
+    "TopUp":       { "dataFields": {} },
+    "LosePod":     { "dataFields": { "idx": "0 | 1 | 2 — external pod deletion (eviction/drain)" } },
+    "SwapConsume": { "dataFields": { "idx": "0 | 1 | 2 — node-failure swap consumes that spare" } }
+  },
+  "terminalStates": [],
+  "dataDomain": {
+    "LosePod":     { "idx": [0, 1, 2] },
+    "SwapConsume": { "idx": [0, 1, 2] }
+  },
+  "invariants": "invariants.mjs"
+}

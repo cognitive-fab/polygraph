@@ -1,0 +1,119 @@
+// emitSparePods emits the run's declared spares as held, unscheduled RoleSpare
+// intent pods (gpusPerPod each) advisory-targeted at pack's spare placements.
+// The base gang's cover already funds active+spares, so the plugin binds these
+// and mints RoleSpare leases from the leftover payers — real, funded standby
+// capacity that sits out the active width and that a node-failure swap lands on.
+// Idempotent: only tops up to the declared spare-pod count.
+func (c *RunController) emitSparePods(run *v1.Run, packPlan pack.Plan, gpusPerPod int, reason string, extra map[string]string) int {
+	if gpusPerPod <= 0 || packPlan.TotalSpares <= 0 || packPlan.TotalSpares%gpusPerPod != 0 {
+		return 0
+	}
+	// A spare consumed by a node-failure swap (its lease closed with reason
+	// "Swap") is not re-provisioned: that funded capacity now carries the
+	// swapped-in active work. Only genuinely-missing spares are topped up.
+	count := packPlan.TotalSpares/gpusPerPod - c.consumedSpareCount(run)
+	if count <= 0 {
+		return 0
+	}
+	placements := sparePlacements(packPlan, gpusPerPod)
+	// Presence is keyed by pod NAME, not a raw count of surviving spares — the same
+	// fix emitCohortPods carries for the active cohort (R2), which the spare path
+	// never got (#91). A count-based scan re-emits indices `existing..count`, so a
+	// spare that went missing OUT OF ORDER (an eviction, or removeSparePodOnNodes
+	// closing the wrong sibling when two spares share a group/node) makes it rebuild
+	// an index a survivor still owns: two pods, then two leases, of one name — which
+	// CheckTransition reads as a closure-reason rewrite (INV-CLOSED-MONOTONE). Fill
+	// only the genuinely-missing indices instead.
+	present := make(map[string]bool, count)
+	for i := range c.State.Pods {
+		p := &c.State.Pods[i]
+		if p.Namespace == run.Namespace && p.Labels[binder.LabelRunName] == run.Name &&
+			p.Labels[binder.LabelRunRole] == binder.RoleSpare {
+			present[p.Name] = true
+		}
+	}
+	created := 0
+	for i := 0; i < count; i++ {
+		name := sparePodName(run, i)
+		if present[name] {
+			continue
+		}
+		node := ""
+		// A spare belongs to the group it covers: that is how findSpareLease pairs it
+		// with the rank it will replace.
+		group := "0"
+		if len(placements) > 0 {
+			node = placements[i%len(placements)].Node
+			if i < len(placements) {
+				group = placements[i].Group
+			}
+		}
+		created++
+		annotations := map[string]string{
+			binder.AnnotationExpectedWidth: strconv.Itoa(count),
+			binder.AnnotationLeaseReason:   reason,
+		}
+		for k, v := range extra {
+			annotations[k] = v
+		}
+		c.State.Pods = append(c.State.Pods, binder.PodManifest{
+			Namespace: run.Namespace,
+			Name:      name,
+			NodeName:  node, // advisory only; the bridge turns this into soft affinity
+			GPUs:      gpusPerPod,
+			Labels: map[string]string{
+				binder.LabelRunName:    run.Name,
+				binder.LabelRunRole:    binder.RoleSpare,
+				binder.LabelGroupIndex: group,
+			},
+			Annotations: annotations,
+		})
+	}
+	return created
+}
+
+// consumedSpareCount is how many of a run's spares have been promoted by a
+// node-failure swap (their RoleSpare lease closed with reason "Swap"). Those
+// spare slots are gone for good — the swap re-used their funded capacity — so
+// emitSparePods must not re-provision them.
+func (c *RunController) consumedSpareCount(run *v1.Run) int {
+	runKey := keys.NamespacedKey(run.Namespace, run.Name)
+	n := 0
+	for i := range c.State.Leases {
+		l := &c.State.Leases[i]
+		if l.Status.Closed && l.Spec.Slice.Role == binder.RoleSpare && l.Status.ClosureReason == "Swap" &&
+			keys.NamespacedKey(l.Spec.RunRef.Namespace, l.Spec.RunRef.Name) == runKey {
+			n++
+		}
+	}
+	return n
+}
+
+// sparePodName is the deterministic name of a run's i-th spare intent pod — the
+// spare counterpart of cohortPodName. Presence in emitSparePods is keyed by it so a
+// top-up never rebuilds an index a surviving spare still owns (#91).
+func sparePodName(run *v1.Run, i int) string {
+	return fmt.Sprintf("%s-spare-%d", run.Name, i)
+}
+
+// sparePlacements does the same for the spares the packer reserved beside each group.
+// A spare belongs to the group it covers: that is how findSpareLease matches them.
+func sparePlacements(plan pack.Plan, gpusPerPod int) []podPlacement {
+	if gpusPerPod <= 0 {
+		return nil
+	}
+	var out []podPlacement
+	for _, g := range plan.Groups {
+		group := strconv.Itoa(g.GroupIndex)
+		for _, sp := range g.SparePlacements {
+			n := sp.GPUs / gpusPerPod
+			if n < 1 {
+				n = 1
+			}
+			for k := 0; k < n; k++ {
+				out = append(out, podPlacement{Node: sp.Node, Group: group})
+			}
+		}
+	}
+	return out
+}

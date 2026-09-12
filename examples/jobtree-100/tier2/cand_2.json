@@ -1,0 +1,128 @@
+[
+  {
+    "id": "prior:consumed-spare-never-reprovisioned",
+    "kind": "domain-prior",
+    "target": "state",
+    "question": "In this machine, must a spare index whose lease was closed with reason 'Swap' stay without an intent pod forever (i.e. reason_i = 'Swap' implies pod_i = 'Gone' in every reachable state)?",
+    "js": "(s) => [0,1,2].every(i => [s.reason0,s.reason1,s.reason2][i] !== 'Swap' || [s.pod0,s.pod1,s.pod2][i] === 'Gone')",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "Capacity consumed by a failover promotion is spent: a standby slot whose lease closed with reason 'Swap' has had its funding re-used by the swapped-in active work and must never be re-materialized as a standby again."
+  },
+  {
+    "id": "prior:funded-capacity-conservation",
+    "kind": "domain-prior",
+    "target": "state",
+    "question": "Must the number of live spare pods plus the number of swap-consumed spare slots never exceed the declared spare count (3) in this machine?",
+    "js": "(s) => [s.pod0,s.pod1,s.pod2].filter(p => p === 'Live').length + [s.reason0,s.reason1,s.reason2].filter(r => r === 'Swap').length <= 3",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "A reconciler may never over-provision beyond the cover that funds it: live standby capacity plus already-consumed standby capacity is bounded by the declared standby width."
+  },
+  {
+    "id": "prior:closure-reason-monotone",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Once an index's lease closure reason is 'Swap', must it remain 'Swap' across every action in this machine (no reason ever rewritten back to 'None')?",
+    "js": "(pre, action, data, post) => [0,1,2].every(i => [pre.reason0,pre.reason1,pre.reason2][i] !== 'Swap' || [post.reason0,post.reason1,post.reason2][i] === 'Swap')",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "Lease closure is terminal and its reason is write-once; a closed lease's closure reason is never rewritten (the classic closed-monotone rule)."
+  },
+  {
+    "id": "prior:reconcile-never-destroys",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Is TopUp required to be purely additive — never turning a Live spare pod into Gone at any index?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || [0,1,2].every(i => [pre.pod0,pre.pod1,pre.pod2][i] !== 'Live' || [post.pod0,post.pod1,post.pod2][i] === 'Live')",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "A top-up reconciler only creates what is genuinely missing; it never deletes or displaces a surviving replica it did not create."
+  },
+  {
+    "id": "prior:reconcile-does-not-touch-leases",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Must TopUp leave every index's closure reason exactly as it was (reconciliation of intent pods never alters lease closure state)?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || (pre.reason0 === post.reason0 && pre.reason1 === post.reason1 && pre.reason2 === post.reason2)",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "Emitting desired-state intent objects is separate from lease bookkeeping; a reconcile pass reads closure reasons but never writes them."
+  },
+  {
+    "id": "prior:swap-consumes-only-live-spare",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Can SwapConsume(idx) only fire when index idx currently has a Live spare pod?",
+    "js": "(pre, action, data, post) => action !== 'SwapConsume' || !data || (data.idx !== 0 && data.idx !== 1 && data.idx !== 2) || [pre.pod0,pre.pod1,pre.pod2][data.idx] === 'Live'",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "A failover can only land on standby capacity that actually exists; you cannot promote a spare that is not currently present and bound."
+  },
+  {
+    "id": "prior:no-double-consume",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Is it forbidden for SwapConsume(idx) to fire on an index whose reason is already 'Swap' (a slot consumed twice)?",
+    "js": "(pre, action, data, post) => action !== 'SwapConsume' || !data || (data.idx !== 0 && data.idx !== 1 && data.idx !== 2) || [pre.reason0,pre.reason1,pre.reason2][data.idx] === 'None'",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "Each unit of standby capacity can be spent at most once; a slot already promoted cannot be promoted again."
+  },
+  {
+    "id": "prior:external-deletion-is-local",
+    "kind": "domain-prior",
+    "target": "transition",
+    "question": "Must LosePod(idx) affect only index idx's pod — leaving every other index's pod and all closure reasons untouched?",
+    "js": "(pre, action, data, post) => action !== 'LosePod' || !data || (data.idx !== 0 && data.idx !== 1 && data.idx !== 2) || ([0,1,2].every(i => i === data.idx || [pre.pod0,pre.pod1,pre.pod2][i] === [post.pod0,post.pod1,post.pod2][i]) && pre.reason0 === post.reason0 && pre.reason1 === post.reason1 && pre.reason2 === post.reason2)",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "An external eviction or drain removes exactly the pod it targets; it is not a signal about any sibling replica and closes no lease with a promotion reason."
+  },
+  {
+    "id": "llm:topup-never-revives-swapped-index",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "Must TopUp leave any index whose reason is 'Swap' still Gone after the action — i.e. the top-up loop can never re-create the pod name of a swap-consumed index?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || [0,1,2].every(i => [pre.reason0,pre.reason1,pre.reason2][i] !== 'Swap' || [post.pod0,post.pod1,post.pod2][i] === 'Gone')",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "The comment states consumed spares are 'gone for good' and must not be re-provisioned; since the loop iterates the dense prefix 0..count-1 while count is only reduced by the consumed tally, a consumed low index is exactly what the loop would rebuild."
+  },
+  {
+    "id": "llm:topup-restores-every-unconsumed-index",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "After TopUp, must every index that has not been swap-consumed hold a Live spare pod (the reconciler fills all genuinely-missing spares, including high indices)?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || [0,1,2].every(i => [post.reason0,post.reason1,post.reason2][i] === 'Swap' || [post.pod0,post.pod1,post.pod2][i] === 'Live')",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "Convergence: one reconcile pass must drive desired-state intent to the declared standby width, filling exactly the missing, non-consumed slots regardless of which indices went missing."
+  },
+  {
+    "id": "llm:topup-reaches-exact-declared-width",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "After TopUp, must the number of Live spare pods equal 3 minus the number of swap-consumed indices — no more and no fewer?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || [post.pod0,post.pod1,post.pod2].filter(p => p === 'Live').length === 3 - [post.reason0,post.reason1,post.reason2].filter(r => r === 'Swap').length",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "count = TotalSpares/gpusPerPod - consumedSpareCount is the reconciler's target width; a pass that ends above it over-provisions the cover, and one that ends below it leaves the run short of standby."
+  },
+  {
+    "id": "llm:topup-idempotent-at-target",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "If the state already holds a Live pod at every non-consumed index and Gone at every consumed one, must TopUp be a complete no-op (idempotent top-up)?",
+    "js": "(pre, action, data, post) => action !== 'TopUp' || ![0,1,2].every(i => ([pre.reason0,pre.reason1,pre.reason2][i] === 'Swap') === ([pre.pod0,pre.pod1,pre.pod2][i] === 'Gone')) || (pre.pod0 === post.pod0 && pre.pod1 === post.pod1 && pre.pod2 === post.pod2 && pre.reason0 === post.reason0 && pre.reason1 === post.reason1 && pre.reason2 === post.reason2)",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "The function documents itself as idempotent: at the fixed point a further reconcile pass creates nothing and changes nothing."
+  },
+  {
+    "id": "llm:swap-marks-reason-and-clears-pod",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "Must SwapConsume(idx) both set reason_idx to 'Swap' and leave pod_idx Gone, while touching no other index?",
+    "js": "(pre, action, data, post) => action !== 'SwapConsume' || !data || (data.idx !== 0 && data.idx !== 1 && data.idx !== 2) || ([post.reason0,post.reason1,post.reason2][data.idx] === 'Swap' && [post.pod0,post.pod1,post.pod2][data.idx] === 'Gone' && [0,1,2].every(i => i === data.idx || ([pre.pod0,pre.pod1,pre.pod2][i] === [post.pod0,post.pod1,post.pod2][i] && [pre.reason0,pre.reason1,pre.reason2][i] === [post.reason0,post.reason1,post.reason2][i])))",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "A node-failure swap consumes exactly one spare: its lease closes with reason 'Swap' and its standby pod stops being standby, with no side effect on sibling spares."
+  },
+  {
+    "id": "llm:lose-pod-on-gone-is-noop",
+    "kind": "code-reading",
+    "target": "transition",
+    "question": "If LosePod(idx) targets an index whose pod is already Gone, must the whole state be unchanged?",
+    "js": "(pre, action, data, post) => action !== 'LosePod' || !data || (data.idx !== 0 && data.idx !== 1 && data.idx !== 2) || [pre.pod0,pre.pod1,pre.pod2][data.idx] !== 'Gone' || (pre.pod0 === post.pod0 && pre.pod1 === post.pod1 && pre.pod2 === post.pod2 && pre.reason0 === post.reason0 && pre.reason1 === post.reason1 && pre.reason2 === post.reason2)",
+    "domain": "Kubernetes GPU run orchestration — spare capacity reconciliation and lease lifecycle",
+    "norm": "Deleting an object that is already absent is a no-op; presence is keyed by pod name, so a repeated deletion of a missing name changes nothing observable."
+  }
+]
