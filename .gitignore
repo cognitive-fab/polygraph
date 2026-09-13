@@ -36,3 +36,7 @@ eval/results/
 *.aux
 *.out
 *.toc
+
+# editor and session outputs — local
+.vscode/
+Claude outputs/
