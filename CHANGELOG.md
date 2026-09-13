@@ -3,6 +3,22 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
+## Unreleased
+
+**polyviz is its own npm workspace; the engines package no longer ships it.**
+
+- `polyviz/package.json` (`@cognitive-fab/polyviz`, private, unpublished): `elkjs`
+  and `@resvg/resvg-js` are its optional dependencies now, and
+  `@cognitive-fab/sam-pattern` its dependency, so the root package carries
+  neither and a consumer of the engines installs 3 MB instead of 16.
+  `polyviz/` leaves the root `files` list. Nothing about either Claude plugin
+  changes: the marketplace still points at `./` and `./polyviz`, the commands,
+  skills and agents are byte-identical, and the plugin runs the script by path
+  as before. `npm install` inside `polyviz/` now installs its own optional
+  dependencies, which the README always said and a copy of `./polyviz` alone
+  could not do. The machine adapter looks for `node_modules` at polyviz's own
+  root before the repository root.
+
 ## 8.1.0 — 2026-08-11
 
 **Grades carry their fault-model version; a migration guide lands in the

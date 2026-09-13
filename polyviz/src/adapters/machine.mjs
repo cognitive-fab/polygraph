@@ -8,11 +8,13 @@
 import { createRequire, Module } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 
 const MAX_STATES = 20000; // runaway backstop; log if hit
 
-// Our install root (contains node_modules) — the fallback resolution base.
-const OUR_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+// Our install root (contains node_modules) — the fallback resolution base: polyviz's own
+// root when it was installed on its own, else the repository root when it is a workspace of it.
+const OUR_ROOT = [resolve(dirname(fileURLToPath(import.meta.url)), '../..'), resolve(dirname(fileURLToPath(import.meta.url)), '../../..')].find((d) => existsSync(resolve(d, 'node_modules'))) ?? resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 /**
  * require() a target module, resolving any bare package it needs (e.g.

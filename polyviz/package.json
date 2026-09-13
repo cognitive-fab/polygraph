@@ -1,0 +1,33 @@
+{
+  "name": "@cognitive-fab/polyviz",
+  "version": "0.1.0",
+  "description": "Deterministic, artifact-derived diagram renderer for the Polygraph method: the state machine, the invariants, the counterexample and the polyvers compat verdict as a fixed catalog of SVGs (optional PNG). Same inputs, byte-identical output; no model call at render time.",
+  "type": "module",
+  "private": true,
+  "//private": "the Claude plugin needs no registry (marketplace source ./polyviz); remove this to publish",
+  "//bin": "no bin entry on purpose: the plugin runs node ${CLAUDE_PLUGIN_ROOT}/bin/polyviz.mjs by path, the root keeps its `polyviz` npm script, and a bin link would have npm rewrite the file's line endings on Windows",
+  "files": [
+    "bin",
+    "src",
+    "assets",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@cognitive-fab/sam-pattern": "^2.2.0"
+  },
+  "optionalDependencies": {
+    "elkjs": "^0.9.3",
+    "@resvg/resvg-js": "^2.6.2"
+  },
+  "scripts": {
+    "test": "node --no-warnings --test test/determinism.test.mjs test/counterexample.test.mjs test/state-machine.test.mjs test/compat.test.mjs test/adapter.test.mjs test/adapter-machine.test.mjs test/adapter-ce.test.mjs test/example.test.mjs test/golden.test.mjs test/schema.test.mjs test/overflow.test.mjs test/theme.test.mjs test/png.test.mjs test/report.test.mjs test/no-hex.test.mjs test/brand.test.mjs"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cognitive-fab/polygraph.git"
+  }
+}
