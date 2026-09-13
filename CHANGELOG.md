@@ -3,7 +3,7 @@
 Notable changes to Polygraph and polygen. Versions before 2.0.0 are
 summarized from the git history; see `git log` for the full record.
 
-## Unreleased
+## 8.3.0 — 2026-09-12
 
 **polyviz is its own npm workspace; the engines package no longer ships it.**
 
